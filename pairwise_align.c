@@ -6,6 +6,7 @@
 
 int *indexes[2];
 int index_size;
+int target;
 
 typedef int score_t;
 
@@ -39,65 +40,30 @@ void release_good_match(good_match_t *doomed)
   free(doomed);
 }
 
-int add_match(int *main_ends, int *match_ends, score_t *scores, int match_count, int max, int minSeparation, 
+int add_match(int **main_ends, int **match_ends, score_t **scores, int match_count, 
               score_t score, int main_end, int match_end)
 {
-  for(int idx=0; idx < match_count-1; idx++)
-  {
-    if(abs(main_end - main_ends[idx]) < minSeparation || abs(match_end - match_ends[idx]) < minSeparation)
-    {
-      if(score <= scores[idx])
-      {
-        return match_count;
-      }
-      else
-      {
-          for(int jdx=idx; jdx < match_count-1; jdx++)
-          {
-            scores[jdx] = scores[jdx+1];
-            main_ends[jdx] = main_ends[jdx+1];
-            match_ends[jdx] = match_ends[jdx+1];
-          }
-          match_count--;
-      }
-    }
-  }
-  main_ends[match_count] = main_end;
-  match_ends[match_count] = match_end;
-  scores[match_count] = score;
+  (*main_ends)[match_count] = main_end;
+  (*match_ends)[match_count] = match_end;
+  (*scores)[match_count] = score;
   match_count++;
 
-  if(match_count == max)
+  if(match_count == target)
   {
-    int worst_keeper;
-    int new_best_index=0;
+    target *= 2;
+    int *new_main = realloc((*main_ends), sizeof(int) * target);
+    int *new_match = realloc((*match_ends), sizeof(int) * target);
+    score_t *new_scores = realloc((*scores), sizeof(score_t) * target);
 
-    int *index_array = malloc(max*sizeof(int));
-    int *sorted_array = malloc(max*sizeof(int));
-    int *best_index = malloc(max*sizeof(int));
-
-    memcpy(sorted_array, scores, sizeof(int)*max);
-    index_sort(sorted_array, index_array, max);
-    worst_keeper = (max/3)*2;
-
-    for(int index_for_index=worst_keeper; index_for_index < max; index_for_index++)
+    if(new_main == NULL || new_match == NULL || new_scores == NULL)
     {
-      best_index[new_best_index] = index_array[index_for_index];
-      new_best_index++;
+      printf("Could not reallocate memory for matches!\n");
+      abort();
     }
 
-    sort(best_index, new_best_index);
-    for(int idx=0; idx < new_best_index; idx++)
-    {
-      scores[idx] = scores[best_index[idx]];
-      main_ends[idx]=main_ends[best_index[idx]];
-      match_ends[idx]=match_ends[best_index[idx]];
-    }
-
-    match_count = max/3;
-    free(index_array);
-    free(sorted_array);
-    free(best_index);
+    (*main_ends) = new_main;
+    (*match_ends) = new_match;
+    (*scores) = new_scores;
   }
 
   return match_count;
@@ -140,7 +106,7 @@ void score_diagnal(seq_data_t *seq_data, sim_matrix_t *sim_matrix, score_t *scor
 }
 
 int harvest_diagnal(seq_data_t *seq_data, score_t *score_matrix[], score_t minScore, int minSeparation, 
-                    int *main_ends,int *match_ends,int *scores, int potential_count, int target, int idx)
+                    int **main_ends,int **match_ends,int **scores, int potential_count, int target, int idx)
 {
 #ifdef _OPENMP
 #pragma omp parallel for shared(score_matrix,minScore, seq_data, main_ends, match_ends, scores, potential_count, target, minSeparation, indexes)
@@ -152,7 +118,7 @@ int harvest_diagnal(seq_data_t *seq_data, score_t *score_matrix[], score_t minSc
 #ifdef _OPENMP
 #pragma omp critical
 #endif
-      potential_count = add_match(main_ends, match_ends, scores, potential_count, target, minSeparation,
+      potential_count = add_match(main_ends, match_ends, scores, potential_count,
                                   score_matrix[idx%3][indexes[0][jdx]],
                                   indexes[0][jdx],indexes[1][jdx]);
     }
@@ -161,17 +127,65 @@ int harvest_diagnal(seq_data_t *seq_data, score_t *score_matrix[], score_t minSc
   return potential_count;
 }
 
+int check_closeness(int *best_mains, int *best_matches, int best_end, int best_length, int main, int match, int minSeperation)
+{
+  for(int idx=0; idx < best_end; idx++)
+  {
+    if(abs(best_mains[best_end-idx]-main) < minSeperation || abs(best_matches[best_end-idx]-match) < minSeperation)
+      return 0;
+  }
+
+  return 1;
+}
+
+int extract_best(int *main_best, int *match_best, score_t *scores_best, 
+                  int *main, int *match, score_t *scores, 
+                  int max_matches, int total_matches, int minSeperation)
+{
+  int *sorted_scores = malloc(sizeof(score_t)*total_matches);
+  int *sorted_mains = malloc(sizeof(int)*total_matches);
+  int *sorted_matches = malloc(sizeof(int)*total_matches);
+  int *indexes = malloc(sizeof(int)*total_matches);
+  memcpy(sorted_scores, scores, sizeof(score_t) * total_matches);
+  index_sort(sorted_scores, indexes, total_matches);
+  int search_index = total_matches-1;
+  int best_index = 0;
+
+  for(int idx=0; idx < total_matches; idx++)
+  {
+    sorted_mains[idx] = main[indexes[idx]];
+    sorted_matches[idx] = match[indexes[idx]];
+  }
+  
+  while(best_index < max_matches && search_index >= 0)
+  {
+    if(check_closeness(sorted_mains, sorted_matches, best_index, total_matches,
+                       main[indexes[search_index]], match[indexes[search_index]], minSeperation))
+    {
+      main_best[best_index] = main[indexes[search_index]];
+      match_best[best_index] = match[indexes[search_index]];
+      scores_best[best_index] = scores[indexes[search_index]];
+      best_index++;
+    }
+    search_index--;
+  }
+
+  free(sorted_scores);
+  free(sorted_mains);
+  free(sorted_matches);
+  free(indexes);
+
+  return best_index;
+}
+
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation)
 {
   good_match_t *answer = malloc(sizeof(good_match_t));
   score_t *score_matrix[3];
-  int target = maxReports * 3;
+  target = maxReports * 3;
   int *main_ends = malloc(sizeof(int)*target);
   int *match_ends = malloc(sizeof(int)*target);
   int *scores = malloc(sizeof(int)*target);
-  int *index_array;
-  int *sort_array;
-  int compare_a, worst, good_index;
   int potential_count=0;
 
   score_matrix[0] = malloc(sizeof(score_t)*seq_data->mainLen);
@@ -191,38 +205,23 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   for(int idx=2; idx < (seq_data->mainLen*2)-2; idx++)
   {
     score_diagnal(seq_data,sim_matrix,score_matrix,idx);
-    potential_count = harvest_diagnal(seq_data, score_matrix, minScore, minSeparation, main_ends, match_ends, scores, potential_count, target, idx);
+    potential_count = harvest_diagnal(seq_data, score_matrix, minScore, minSeparation, &main_ends, &match_ends, &scores, 
+                                      potential_count, target, idx);
   }
 
   free(indexes[0]);
   free(indexes[1]);
 
-  index_array = malloc(sizeof(int) * potential_count);
-  sort_array = malloc(sizeof(int) * potential_count);
-
-  memcpy(sort_array, scores, potential_count * sizeof(int));
-  index_sort(sort_array, index_array, potential_count);
-  compare_a = potential_count - maxReports;
-  worst = compare_a > 0 ? compare_a : 0;
-  good_index = 0;
-  answer->goodScores=malloc(sizeof(int)*maxReports);
+  answer->goodScores=malloc(sizeof(score_t)*maxReports);
   answer->goodEnds[0]=malloc(sizeof(int)*maxReports);
   answer->goodEnds[1]=malloc(sizeof(int)*maxReports);
-  for(int idx = potential_count-1; idx >= worst; idx--)
-  {
-    answer->goodScores[good_index] = scores[index_array[idx]];
-    answer->goodEnds[0][good_index] = main_ends[index_array[idx]];
-    answer->goodEnds[1][good_index] = match_ends[index_array[idx]];
-    good_index++;
-  }
-  answer->numReports = good_index;
+
+  answer->numReports = extract_best(answer->goodEnds[0],answer->goodEnds[1],answer->goodScores,
+                                    main_ends,match_ends,scores,maxReports,potential_count,minSeparation);
 
   free(main_ends);
   free(match_ends);
   free(scores);
-  free(index_array);
-  free(sort_array);
-
 
   free(score_matrix[0]);
   free(score_matrix[1]);
