@@ -31,7 +31,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     if(score != A->bestScores[m])
     {
       retval = 1;
-      printf("\nverifyAlignment %i failed; reported %i versus actual %i:\n---------------------------\n",
+      printf("\nverifyAlignment %i failed; Kernel 1 reported %i versus Kernel 2 reported %i:\n---------------------------\n",
              m, A->bestScores[m], score);
     }
     else if(m < maxDisplay)
@@ -196,11 +196,12 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report)
 
   int *mainSeq = A->seqData->main;
   int *matchSeq = A->seqData->match;
-  //int gapStart = A->simMatrix->gapStart;
-  //int gapExtend = A->simMatrix->gapExtend;
-  //int gapFirst = gapStart + gapExtend;        // total penalty for first codon in gap
-  int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;
-  int gapExtend = gapFirst;
+  //int gapFirst = A->simMatrix->gapStart;
+  int gapExtend = A->simMatrix->gapExtend;
+  int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;        // total penalty for first codon in gap
+  //int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;
+  //int gapExtend = gapFirst;
+
 
   int m = ei > ej ? ei : ej;
   int *V[2];

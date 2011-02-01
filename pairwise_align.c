@@ -96,20 +96,22 @@ void score_diagnal(seq_data_t *seq_data, sim_matrix_t *sim_matrix, score_t *scor
   for(int jdx=0; jdx < index_size; jdx++)
   {
     main_gap_start = score_matrix[(idx-1)%3][indexes[0][jdx]] -
-      (sim_matrix->gapStart+sim_matrix->gapStart);
+      (sim_matrix->gapStart+sim_matrix->gapExtend);
     main_gap_extend = E[(idx-1)%3][indexes[0][jdx]] - sim_matrix->gapExtend;
     E[idx%3][indexes[0][jdx]] = max(main_gap_start,main_gap_extend);
 
     match_gap_start = score_matrix[(idx-1)%3][indexes[0][jdx]-1] -
-      (sim_matrix->gapStart+sim_matrix->gapStart);
+      (sim_matrix->gapStart+sim_matrix->gapExtend);
     match_gap_extend = F[(idx-1)%3][indexes[0][jdx]-1] - sim_matrix->gapExtend;
     F[idx%3][indexes[0][jdx]] = max(match_gap_start,match_gap_extend);
 
     match_score = score_matrix[(idx-2)%3][indexes[0][jdx]-1] +
       sim_matrix->similarity[seq_data->main[indexes[0][jdx]]][seq_data->match[indexes[1][jdx]]];
+
     cmp = max(E[idx%3][indexes[0][jdx]], F[idx%3][indexes[0][jdx]]);
     cmp = max(cmp,match_score);
     cmp = max(cmp, 0);
+
     score_matrix[idx%3][indexes[0][jdx]] = cmp;
   }
 }
@@ -140,7 +142,7 @@ int check_closeness(int *best_mains, int *best_matches, int best_end, int best_l
 {
   for(int idx=0; idx < best_end; idx++)
   {
-    if(abs(best_mains[best_end-idx]-main) < minSeperation || abs(best_matches[best_end-idx]-match) < minSeperation)
+    if(abs(best_mains[best_length-idx-1]-main) < minSeperation || abs(best_matches[best_length-idx-1]-match) < minSeperation)
       return 0;
   }
 
@@ -159,6 +161,7 @@ int extract_best(int *main_best, int *match_best, score_t *scores_best,
   index_sort(sorted_scores, indexes, total_matches);
   int search_index = total_matches-1;
   int best_index = 0;
+  int checked_index = 0;
 
   for(int idx=0; idx < total_matches; idx++)
   {
@@ -168,7 +171,7 @@ int extract_best(int *main_best, int *match_best, score_t *scores_best,
   
   while(best_index < max_matches && search_index >= 0)
   {
-    if(check_closeness(sorted_mains, sorted_matches, best_index, total_matches,
+    if(check_closeness(sorted_mains, sorted_matches, checked_index, total_matches,
                        main[indexes[search_index]], match[indexes[search_index]], minSeperation))
     {
       main_best[best_index] = main[indexes[search_index]];
@@ -177,6 +180,7 @@ int extract_best(int *main_best, int *match_best, score_t *scores_best,
       best_index++;
     }
     search_index--;
+    checked_index++;
   }
 
   free(sorted_scores);
@@ -208,10 +212,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   F[0] = malloc(sizeof(score_t)*seq_data->mainLen);
   F[1] = malloc(sizeof(score_t)*seq_data->mainLen);
   F[2] = malloc(sizeof(score_t)*seq_data->mainLen);
-
-  memset(score_matrix[0], '\0', sizeof(score_t)*seq_data->mainLen);
-  memset(score_matrix[1], '\0', sizeof(score_t)*seq_data->mainLen);
-  memset(score_matrix[2], '\0', sizeof(score_t)*seq_data->mainLen);
 
   memset(E[0], '\0', sizeof(score_t)*seq_data->mainLen);
   memset(E[1], '\0', sizeof(score_t)*seq_data->mainLen);

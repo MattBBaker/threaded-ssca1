@@ -36,8 +36,8 @@ void init_parameters(parameters_t *parameters)
   parameters->SIM_EXACT         = 5;                  /* >0  Exact codon match */
   parameters->SIM_SIMILAR       = 4;                  /*     Amino acid (or Stop) match */
   parameters->SIM_DISSIMILAR    = -3;                 /* <0  Different amino acids */
-  parameters->GAP_START         = 0;                  /* >=0 Gap-start penalty */
-  parameters->GAP_EXTEND        = 5;                  /* >0  Gap-extension penalty */
+  parameters->GAP_START         = 5;                  /* >=0 Gap-start penalty */
+  parameters->GAP_EXTEND        = 2;                  /* >0  Gap-extension penalty */
   parameters->MATCH_LIMIT       = 3*(int)scale;       /* Longest interesting match */
 
   /* Kernel 4/5 base sequence difference scoring function */
