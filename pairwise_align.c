@@ -1,8 +1,14 @@
+#define _GNU_SOURCE
+#define _BSD_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sort.h>
 #include <pairwise_align.h>
 #include <string.h>
+#include <sys/mman.h>
+
+#define HUGE_PAGE_SIZE ((size_t)(2*1024*1024))
 
 int *indexes[2];
 int index_size;
@@ -191,6 +197,10 @@ int extract_best(int *main_best, int *match_best, score_t *scores_best,
   return best_index;
 }
 
+/* madvise defines pulled from kernel 2.6.38-rc2 */
+#define MADV_HUGEPAGE 14    /* Worth backing with hugepages */
+#define MADV_NOHUGEPAGE 15    /* Not worth backing with hugepages */
+
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation)
 {
   good_match_t *answer = malloc(sizeof(good_match_t));
@@ -200,6 +210,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   int *match_ends = malloc(sizeof(int)*target);
   int *scores = malloc(sizeof(int)*target);
   int potential_count=0;
+
 
   score_matrix[0] = malloc(sizeof(score_t)*seq_data->mainLen);
   score_matrix[1] = malloc(sizeof(score_t)*seq_data->mainLen);
@@ -212,6 +223,50 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   F[0] = malloc(sizeof(score_t)*seq_data->mainLen);
   F[1] = malloc(sizeof(score_t)*seq_data->mainLen);
   F[2] = malloc(sizeof(score_t)*seq_data->mainLen);
+
+  /*
+  posix_memalign(&(score_matrix[0]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(score_matrix[1]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(score_matrix[2]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+
+  posix_memalign(&(E[0]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(E[1]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(E[2]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+
+  posix_memalign(&(F[0]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(F[1]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  posix_memalign(&(F[2]), HUGE_PAGE_SIZE, sizeof(score_t)*seq_data->mainLen);
+  */
+  /*
+  madvise(score_matrix[0],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(score_matrix[1],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(score_matrix[2],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+
+  madvise(E[0],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(E[1],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(E[2],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+
+  madvise(F[0],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(F[1],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  madvise(F[2],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
+  */
+
+  madvise(score_matrix[0],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(score_matrix[1],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(score_matrix[2],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+
+  madvise(E[0],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(E[1],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(E[2],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+
+  madvise(F[0],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(F[1],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  madvise(F[2],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+
+
+  memset(score_matrix[0], '\0', sizeof(score_t)*seq_data->mainLen);
+  memset(score_matrix[1], '\0', sizeof(score_t)*seq_data->mainLen);
+  memset(score_matrix[2], '\0', sizeof(score_t)*seq_data->mainLen);
 
   memset(E[0], '\0', sizeof(score_t)*seq_data->mainLen);
   memset(E[1], '\0', sizeof(score_t)*seq_data->mainLen);
