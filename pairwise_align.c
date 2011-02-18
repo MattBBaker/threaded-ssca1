@@ -249,7 +249,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   madvise(F[0],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
   madvise(F[1],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
   madvise(F[2],sizeof(score_t)*seq_data->mainLen,MADV_WILLNEED);
-  */
 
   madvise(score_matrix[0],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
   madvise(score_matrix[1],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
@@ -262,6 +261,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   madvise(F[0],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
   madvise(F[1],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
   madvise(F[2],sizeof(score_t)*seq_data->mainLen,MADV_HUGEPAGE);
+  */
 
 
   memset(score_matrix[0], '\0', sizeof(score_t)*seq_data->mainLen);
