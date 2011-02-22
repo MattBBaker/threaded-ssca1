@@ -101,6 +101,7 @@ void considerAdding(int V[], int *minScore, int *report, int minSeparation, int 
 
 void release_good_match(good_match_t *doomed)
 {
+  if(doomed==NULL) return;
   free(doomed->goodScores);
   free(doomed->goodEnds[1]);
   free(doomed->goodEnds[0]);
