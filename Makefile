@@ -14,7 +14,7 @@ endif
 
 ifeq ($(COMPILER), gcc)
 	CC=gcc 
-	COMMON_CFLAGS=-std=c99 -Wall -pipe -g #-fopenmp
+	COMMON_CFLAGS=-std=c99 -Wall -pipe -g -pthread #-fopenmp
 	OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
 	DEBUG_CFLAGS=-O0 -ggdb
 endif

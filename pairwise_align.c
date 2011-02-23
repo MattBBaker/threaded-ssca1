@@ -14,20 +14,38 @@ See file LICENSING for licensing information.
 #include <pairwise_align.h>
 #include <string.h>
 
+#define USE_PTHREADS
+
+#ifdef USE_PTHREADS
+#include <pthread.h>
+#endif
+
+int report=0;
+#ifdef USE_PTHREADS
+//pthread_mutex_t adder_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t adder_lock;
+#endif
+
 /* consider adding this endpoint, possibly eliminating near by endpoints */
 
-void considerAdding(int V[], int *minScore, int *report, int minSeparation, int i, int j, int sortReports, int maxReports, int **goodEnds, int *goodScores)
+void considerAdding(int V[], int minSeparation, int i, int j, int main_index, int match_index,
+                    int sortReports, int maxReports, int **goodEnds, int *goodScores)
 {
   int elements_to_copy;
+  //printf("Considering\n");
+#ifdef USE_PTHREADS
+  //pthread_mutex_lock(&adder_lock);
+  pthread_mutex_lock(&adder_lock);
+#endif
 
-  for(int r=(*report)-1; r>=0; r--)
+  for(int r=report-1; r>=0; r--)
   {
     if((i - goodEnds[0][r]) >= minSeparation) break; // retain point r
     if(abs(j - goodEnds[1][r]) >= minSeparation) continue;  // if not near by
-    if(goodScores[r] > V[j]) return; // discard new point, maybe others
+    if(goodScores[r] > V[j]) goto out; // discard new point, maybe others
 
     // discard point r
-    elements_to_copy = (*report);
+    elements_to_copy = report;
 
     for(int i = r; i < elements_to_copy; i++)
     {
@@ -35,23 +53,25 @@ void considerAdding(int V[], int *minScore, int *report, int minSeparation, int 
       goodEnds[0][i]=goodEnds[0][i+1];
       goodEnds[1][i]=goodEnds[1][i+1];
     }
-    (*report)--;
+    report--;
   }
 
   // debug code, V[j] typically should not be this high
 
   //if(V[j] > 100)
   //  printf("adding element: %i at index: %i\n", V[j], *report);
+
+  //printf("adding element: %i at index: %i\n", V[j], report);
   
   // add a new point
-  goodScores[*report]=V[j];
-  goodEnds[0][*report]=i;
-  goodEnds[1][*report]=j;
-  (*report)++;
+  goodScores[report]=V[j];
+  goodEnds[0][report]=main_index;
+  goodEnds[1][report]=match_index;
+  report++;
 
   // When the table is full, sort and discard all but the best end points.
   // Keep the table in entry order, just compact-out the discarded entries.
-  if(*report == sortReports)
+  if(report == sortReports)
   {
     int worst_keeper;
     int new_best_index=0;
@@ -63,10 +83,10 @@ void considerAdding(int V[], int *minScore, int *report, int minSeparation, int 
     sorted_array[0]=0;
 
     memcpy(sorted_array, goodScores, sizeof(int)*sortReports);
-    index_sort(sorted_array, index_array, *report);
+    index_sort(sorted_array, index_array, report);
 
     worst_keeper = sortReports - maxReports;
-    *minScore = sorted_array[worst_keeper] + 1;
+    //*minScore = sorted_array[worst_keeper] + 1;
 
     for(int index_for_index=worst_keeper; index_for_index < sortReports; index_for_index++)
     {
@@ -81,12 +101,17 @@ void considerAdding(int V[], int *minScore, int *report, int minSeparation, int 
       goodEnds[0][idx]=goodEnds[0][best_index[idx]];
       goodEnds[1][idx]=goodEnds[1][best_index[idx]];
     }
-    *report = maxReports;
+    report = maxReports;
 
     free(index_array);
     free(sorted_array);
     free(best_index);
   } 
+
+ out:
+#ifdef USE_PTHREADS
+  pthread_mutex_unlock(&adder_lock);
+#endif
 }
 
 /* release_good_match:
@@ -137,6 +162,8 @@ void release_good_match(good_match_t *doomed)
  *       ->numReports - an integer, the number of reports represented
  */
 
+
+#ifndef USE_PTHREADS
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation)
 {
   good_match_t *answer = malloc(sizeof(good_match_t));
@@ -175,7 +202,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   int *matchSeq = seq_data->match;
   int gapExtend = sim_matrix->gapExtend;
   int gapFirst = sim_matrix->gapStart + gapExtend;
-  int report = 0;
+  //int report = 0;
   int good_index = 0;
   int n = seq_data->mainLen;
   int m = seq_data->matchLen;
@@ -226,7 +253,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
          (j == m-1 || i == n-1 || sim_matrix->similarity[mainSeq[i+1]][matchSeq[j+1]] <= 0))
       {
         // update goodScores/goodEnds
-        considerAdding(V, &minScore, &report, minSeparation, i, j, sortReports, maxReports, working_good_ends, working_good_scores);
+        considerAdding(V, minSeparation, i, j, i, j, sortReports, maxReports, working_good_ends, working_good_scores);
       }
       // find the best weight assuming a gap in mainSeq
       compare_a = E - gapExtend;
@@ -263,3 +290,205 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   answer->numReports = good_index;
   return answer;
 }
+#else
+
+typedef struct
+{
+  seq_data_t *seq_data;
+  sim_matrix_t *sim_matrix;
+  int *working_good_scores;
+  int *working_good_ends[2];
+  int search_length;
+  int max_match;
+  int start_offset;
+  int min_score;
+  int min_separation;
+  int sort_reports;
+  int max_reports;
+} payload_t;
+
+void *pairwise_worker(void *data)
+{
+  payload_t *in_data = (payload_t *)data;
+  int *mainSeq = in_data->seq_data->main;
+  int *matchSeq = in_data->seq_data->match;
+  int sortReports = in_data->sort_reports;
+  int maxReports = in_data->max_reports;
+  int gapExtend = in_data->sim_matrix->gapExtend;
+  int gapFirst = in_data->sim_matrix->gapStart + gapExtend;
+  int n = in_data->seq_data->mainLen;
+  int m = in_data->seq_data->matchLen;
+  int main_sequence, W, G, E, Vp, compare_a, compare_b, i, j; 
+  int *F = malloc(sizeof(int)*(in_data->search_length+in_data->max_match));
+  int *V = malloc(sizeof(int)*(in_data->search_length+in_data->max_match));
+  int minScore = in_data->min_score;
+  int minSeparation = in_data->min_separation;
+  int *working_good_ends[2];
+  int *working_good_scores = in_data->working_good_scores;
+  working_good_ends[0] = in_data->working_good_ends[0];
+  working_good_ends[1] = in_data->working_good_ends[1];
+  int start;
+  int search_length;
+  int primer_length;
+
+  //start = start_offset - max_match;
+  if(in_data->start_offset - in_data->max_match < 0)
+  {
+    start = 0;
+    search_length = in_data->search_length + in_data->start_offset - in_data->max_match;
+    primer_length = 0;
+  }
+  else
+  {
+    start = in_data->start_offset - in_data->max_match;
+    search_length = in_data->search_length;
+    primer_length = in_data->max_match;
+  }
+  
+  for(int idx = 0; idx < in_data->search_length+in_data->max_match; idx++)
+  {
+    V[idx] = 0;
+    F[idx] = -gapFirst;
+  }
+
+  for(i=0; i<n; i++)
+  {
+    main_sequence=mainSeq[i];
+    G = in_data->sim_matrix->similarity[main_sequence][matchSeq[start]];
+    Vp = V[0];
+    // Matlab has a builtin MAX function that can take arbitrary vectors, I have
+    // to simulate that with compare_{a,b} and multiple compare.  
+    compare_a = F[0] > G ? F[0] : G;
+    V[0] = 0 > compare_a ? 0 : compare_a;
+    F[0] = (F[0] - gapExtend > V[0] - gapFirst) ? F[0] - gapExtend : V[0] - gapFirst;
+    E = V[0] - gapFirst;
+
+    // match each mainSeq with each matchSeq codon to get a similarity weight
+    for(j = 1; j < search_length; j++)
+    {
+      // match each mainSeq with each matchSeq codon to get a similarity weight
+      W = in_data->sim_matrix->similarity[main_sequence][matchSeq[j+start]];
+      // add the weight of the best match ending just before it
+      G = Vp + W;
+      // find the very best weight ending with this pair
+      Vp = V[j]; // value of previous row
+      // 4, we are comparing 4 values!  Ah ah!
+      compare_a = 0 > E ? 0 : E;
+      //compare_a = 0;
+      compare_b = F[j] > compare_a ? F[j] : compare_a;
+      V[j] = G > compare_b ? G : compare_b;
+      //if(E > 0 && E > F[j] && E > G) printf("Bummer: E=%i, F[j]=%i, G=%i\n", E, F[j], G);
+      // If score is good enough, this is an improvement, is not a skip,
+      // and the next pair doesn't improve the match'
+      if((V[j] >= minScore && W > 0 && V[j] == G) && 
+         (j == m-1 || i == n-1 || in_data->sim_matrix->similarity[mainSeq[i+1]][matchSeq[j+start+1]] <= 0) && j >= primer_length )
+      {
+        // update goodScores/goodEnds
+        considerAdding(V, minSeparation, i, j, i, j+start, sortReports, maxReports, working_good_ends, working_good_scores);
+      }
+      // find the best weight assuming a gap in mainSeq
+      compare_a = E - gapExtend;
+      compare_b = V[j] - gapFirst;
+      E = compare_a > compare_b ? compare_a : compare_b;
+      // find the best weight assuming a gap in matchSeq
+      compare_a = F[j] - gapExtend;
+      compare_b = V[j] - gapFirst;
+      F[j] =  compare_a > compare_b ? compare_a : compare_b;
+    }
+  }
+  free(V);
+  free(F);
+
+  return NULL;
+}
+
+good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation)
+{
+  good_match_t *answer = malloc(sizeof(good_match_t));
+  int sortReports = maxReports * 3;
+  int *index_array = malloc(sortReports * sizeof(int));
+  int *sort_array = malloc(sortReports * sizeof(int));
+  answer->simMatrix = sim_matrix;
+  answer->seqData = seq_data;
+  answer->goodEnds[0] = malloc(sizeof(int)*maxReports);
+  answer->goodEnds[1] = malloc(sizeof(int)*maxReports);
+  answer->goodScores = malloc(sizeof(int)*maxReports);
+
+  memset(answer->goodEnds[0], 0, sizeof(int)*maxReports);
+  memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
+  memset(answer->goodScores, 0, sizeof(int)*maxReports);
+
+  pthread_t thread_a;
+  pthread_t thread_b;
+
+  // With sufficiently large datasets these elements will cause
+  // the program to segfault, blowing well past the stack.
+  // So we need to malloc these bits.
+  payload_t *in_data_a = malloc(sizeof(payload_t));
+  payload_t *in_data_b = malloc(sizeof(payload_t));
+  in_data_a->sort_reports = sortReports;
+  in_data_a->max_reports = maxReports;
+  in_data_a->sim_matrix = sim_matrix;
+  in_data_a->seq_data = seq_data;
+  in_data_a->min_score = minScore;
+  in_data_a->min_separation = minSeparation;
+  in_data_a->working_good_scores = malloc(sizeof(int)*sortReports);
+  in_data_a->working_good_ends[0] = malloc(sizeof(int *)*sortReports);
+  in_data_a->working_good_ends[1] = malloc(sizeof(int *)*sortReports);
+  in_data_a->max_match = sim_matrix->matchLimit;
+  memcpy(in_data_b,in_data_a,sizeof(payload_t));
+
+  memset(in_data_a->working_good_scores,0,sortReports*sizeof(int));
+  answer->bestEnds[0] = NULL;
+  answer->bestStarts[0] = NULL;
+  answer->bestEnds[1] = NULL;
+  answer->bestStarts[1] = NULL;
+  answer->bestSeqs = NULL;
+  answer->bestScores = NULL;
+
+  int worst, compare_a;
+  int good_index = 0;
+
+  in_data_a->start_offset=0;
+  in_data_a->search_length=in_data_a->seq_data->mainLen/2;
+  in_data_b->start_offset=(in_data_b->seq_data->mainLen/2)+1;
+  in_data_b->search_length=in_data_b->seq_data->mainLen/2;
+
+  pthread_mutex_init(&adder_lock, NULL);
+
+
+  pthread_create(&thread_a, NULL, pairwise_worker, in_data_a);
+  pthread_create(&thread_b, NULL, pairwise_worker, in_data_b);
+
+  pthread_join(thread_a, NULL);
+  pthread_join(thread_b, NULL);
+  /*
+  pairwise_worker(in_data_a);
+  printf("Ping\n");
+  //in_data->start_offset=(in_data->seq_data->mainLen/2)+1;
+  pairwise_worker(in_data_b);
+  */
+
+  memcpy(sort_array, in_data_a->working_good_scores, sortReports * sizeof(int));
+  memset(index_array, 0, sizeof(int)*sortReports);
+  index_sort(sort_array, index_array, report);
+  compare_a = report - maxReports;
+  worst = compare_a > 0 ? compare_a : 0;
+  good_index = 0;
+  for(int idx = report-1; idx >= worst; idx--)
+  {
+    answer->goodScores[good_index] = in_data_a->working_good_scores[index_array[idx]];
+    answer->goodEnds[0][good_index] = in_data_a->working_good_ends[0][index_array[idx]];
+    answer->goodEnds[1][good_index] = in_data_a->working_good_ends[1][index_array[idx]];
+    good_index++;
+  }
+
+  free(in_data_a->working_good_scores);
+  free(in_data_a->working_good_ends[0]);
+  free(in_data_a->working_good_ends[1]);
+  free(sort_array);
+  free(index_array);
+  answer->numReports = good_index;
+  return answer;
+}
+#endif
