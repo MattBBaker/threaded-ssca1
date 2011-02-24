@@ -106,6 +106,15 @@ int main(int argc, char **argv)
 
   init_parameters(&global_parameters);
 
+  if(argc > 1 && !strcmp(argv[1],"--threads"))
+  {
+    global_parameters.threads = atoi(argv[2]);
+  }
+  else
+  {
+    global_parameters.threads = 1;
+  }
+
   good_match_t *S[global_parameters.K2_MAX_REPORTS];
   memset(S, 0, sizeof(good_match_t *)*global_parameters.K2_MAX_REPORTS);
 
@@ -148,7 +157,7 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
 
-  A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
+  A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION, global_parameters.threads);
 
   display_elapsed(&start_time);
 

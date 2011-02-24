@@ -331,7 +331,6 @@ void *pairwise_worker(void *data)
   int search_length;
   int primer_length;
 
-  //start = start_offset - max_match;
   if(in_data->start_offset - in_data->max_match < 0)
   {
     start = 0;
@@ -402,7 +401,7 @@ void *pairwise_worker(void *data)
   return NULL;
 }
 
-good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation)
+good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation, int threads)
 {
   good_match_t *answer = malloc(sizeof(good_match_t));
   int sortReports = maxReports * 3;
@@ -418,27 +417,27 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
   memset(answer->goodScores, 0, sizeof(int)*maxReports);
 
-  pthread_t thread_a;
-  pthread_t thread_b;
+  int min_size = (seq_data->mainLen/threads);
+  int big_runs = (seq_data->mainLen%threads);
+  int small_runs = (threads-big_runs);
 
-  // With sufficiently large datasets these elements will cause
-  // the program to segfault, blowing well past the stack.
-  // So we need to malloc these bits.
-  payload_t *in_data_a = malloc(sizeof(payload_t));
-  payload_t *in_data_b = malloc(sizeof(payload_t));
-  in_data_a->sort_reports = sortReports;
-  in_data_a->max_reports = maxReports;
-  in_data_a->sim_matrix = sim_matrix;
-  in_data_a->seq_data = seq_data;
-  in_data_a->min_score = minScore;
-  in_data_a->min_separation = minSeparation;
-  in_data_a->working_good_scores = malloc(sizeof(int)*sortReports);
-  in_data_a->working_good_ends[0] = malloc(sizeof(int *)*sortReports);
-  in_data_a->working_good_ends[1] = malloc(sizeof(int *)*sortReports);
-  in_data_a->max_match = sim_matrix->matchLimit;
-  memcpy(in_data_b,in_data_a,sizeof(payload_t));
+  pthread_t *pairwise_threads = malloc(sizeof(pthread_t)*threads);
+  payload_t **payloads = malloc(sizeof(payload_t *)*threads);
+  payload_t staging;
 
-  memset(in_data_a->working_good_scores,0,sortReports*sizeof(int));
+  memset(&staging, '\0', sizeof(payload_t));
+  staging.sort_reports = sortReports;
+  staging.max_reports = maxReports;
+  staging.sim_matrix = sim_matrix;
+  staging.seq_data = seq_data;
+  staging.min_score = minScore;
+  staging.min_separation = minSeparation;
+  staging.working_good_scores = malloc(sizeof(int)*sortReports);
+  staging.working_good_ends[0] = malloc(sizeof(int *)*sortReports);
+  staging.working_good_ends[1] = malloc(sizeof(int *)*sortReports);
+  staging.max_match = sim_matrix->matchLimit;
+
+  memset(staging.working_good_scores,0,sortReports*sizeof(int));
   answer->bestEnds[0] = NULL;
   answer->bestStarts[0] = NULL;
   answer->bestEnds[1] = NULL;
@@ -449,27 +448,32 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   int worst, compare_a;
   int good_index = 0;
 
-  in_data_a->start_offset=0;
-  in_data_a->search_length=in_data_a->seq_data->mainLen/2;
-  in_data_b->start_offset=(in_data_b->seq_data->mainLen/2)+1;
-  in_data_b->search_length=in_data_b->seq_data->mainLen/2;
-
   pthread_mutex_init(&adder_lock, NULL);
 
+  for(int idx=0; idx < big_runs; idx++)
+  {
+    payloads[idx] = malloc(sizeof(payload_t));
+    memcpy(payloads[idx], &staging, sizeof(payload_t));
+    payloads[idx]->start_offset=(min_size+1)*idx;
+    payloads[idx]->search_length=min_size+1;
+    pthread_create(&(pairwise_threads[idx]),NULL, pairwise_worker, payloads[idx]);
+  }
 
-  pthread_create(&thread_a, NULL, pairwise_worker, in_data_a);
-  pthread_create(&thread_b, NULL, pairwise_worker, in_data_b);
+  for(int idx=big_runs; idx < threads; idx++)
+  {
+    payloads[idx] = malloc(sizeof(payload_t));
+    memcpy(payloads[idx], &staging, sizeof(payload_t));
+    payloads[idx]->start_offset=((min_size+1)*big_runs)+(min_size*(idx-small_runs));
+    payloads[idx]->search_length=min_size;
+    pthread_create(&(pairwise_threads[idx]),NULL, pairwise_worker, payloads[idx]);
+  }
 
-  pthread_join(thread_a, NULL);
-  pthread_join(thread_b, NULL);
-  /*
-  pairwise_worker(in_data_a);
-  printf("Ping\n");
-  //in_data->start_offset=(in_data->seq_data->mainLen/2)+1;
-  pairwise_worker(in_data_b);
-  */
+  for(int idx=0; idx < threads; idx++)
+  {
+    pthread_join(pairwise_threads[idx], NULL);
+  }
 
-  memcpy(sort_array, in_data_a->working_good_scores, sortReports * sizeof(int));
+  memcpy(sort_array, staging.working_good_scores, sortReports * sizeof(int));
   memset(index_array, 0, sizeof(int)*sortReports);
   index_sort(sort_array, index_array, report);
   compare_a = report - maxReports;
@@ -477,15 +481,15 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   good_index = 0;
   for(int idx = report-1; idx >= worst; idx--)
   {
-    answer->goodScores[good_index] = in_data_a->working_good_scores[index_array[idx]];
-    answer->goodEnds[0][good_index] = in_data_a->working_good_ends[0][index_array[idx]];
-    answer->goodEnds[1][good_index] = in_data_a->working_good_ends[1][index_array[idx]];
+    answer->goodScores[good_index] = staging.working_good_scores[index_array[idx]];
+    answer->goodEnds[0][good_index] = staging.working_good_ends[0][index_array[idx]];
+    answer->goodEnds[1][good_index] = staging.working_good_ends[1][index_array[idx]];
     good_index++;
   }
 
-  free(in_data_a->working_good_scores);
-  free(in_data_a->working_good_ends[0]);
-  free(in_data_a->working_good_ends[1]);
+  free(staging.working_good_scores);
+  free(staging.working_good_ends[0]);
+  free(staging.working_good_ends[1]);
   free(sort_array);
   free(index_array);
   answer->numReports = good_index;

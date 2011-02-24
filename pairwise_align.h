@@ -29,7 +29,7 @@ typedef struct _good_match_t
   int bestLength;
 } good_match_t;
 
-good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int K1_MIN_SCORE, int K1_MAX_REPORTS, int K1_MIN_SEPARATION);
+good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int K1_MIN_SCORE, int K1_MAX_REPORTS, int K1_MIN_SEPARATION, int threads);
 void release_good_match(good_match_t *);
 
 #endif

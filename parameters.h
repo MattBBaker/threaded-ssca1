@@ -37,6 +37,8 @@ typedef struct _params
  int K4_DISPLAY;
 
  int K5_DISPLAY;
+
+ int threads;
 } parameters_t;
 
 void init_parameters(parameters_t *parameters);
