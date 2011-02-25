@@ -463,7 +463,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   {
     payloads[idx] = malloc(sizeof(payload_t));
     memcpy(payloads[idx], &staging, sizeof(payload_t));
-    payloads[idx]->start_offset=((min_size+1)*big_runs)+(min_size*(idx-small_runs));
+    payloads[idx]->start_offset=((min_size+1)*big_runs)+(min_size*(idx-big_runs));
     payloads[idx]->search_length=min_size;
     pthread_create(&(pairwise_threads[idx]),NULL, pairwise_worker, payloads[idx]);
   }
