@@ -20,40 +20,46 @@ See file LICENSING for licensing information.
 #include <pthread.h>
 #endif
 
-int report=0;
-#ifdef USE_PTHREADS
-//pthread_mutex_t adder_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t adder_lock;
-#endif
+typedef struct
+{
+  int *goodEnds[2];
+  int *goodScores;
+  int report;
+  int size;
+} current_ends_t;
+
+void compact_reports(current_ends_t *score_ends, int new_size)
+{
+}
 
 /* consider adding this endpoint, possibly eliminating near by endpoints */
 
-void considerAdding(int V[], int minSeparation, int i, int j, int main_index, int match_index,
+/*
+void considerAdding(int score, int minSeparation, int main_index, int match_index,
                     int sortReports, int maxReports, int **goodEnds, int *goodScores)
+*/
+void considerAdding(int score, int minSeparation, int main_index, int match_index, 
+                    int maxReports, current_ends_t *score_ends)
 {
   int elements_to_copy;
   //printf("Considering\n");
-#ifdef USE_PTHREADS
-  //pthread_mutex_lock(&adder_lock);
-  pthread_mutex_lock(&adder_lock);
-#endif
 
-  for(int r=report-1; r>=0; r--)
+  for(int r=score_ends->report-1; r>=0; r--)
   {
-    if((i - goodEnds[0][r]) >= minSeparation) break; // retain point r
-    if(abs(j - goodEnds[1][r]) >= minSeparation) continue;  // if not near by
-    if(goodScores[r] > V[j]) goto out; // discard new point, maybe others
+    if((main_index - score_ends->goodEnds[0][r]) >= minSeparation) break; // retain point r
+    if(abs(match_index - score_ends->goodEnds[1][r]) >= minSeparation) continue;  // if not near by
+    if(score_ends->goodScores[r] > score) return; // discard new point, maybe others
 
     // discard point r
-    elements_to_copy = report;
+    elements_to_copy = score_ends->report;
 
     for(int i = r; i < elements_to_copy; i++)
     {
-      goodScores[i]=goodScores[i+1];
-      goodEnds[0][i]=goodEnds[0][i+1];
-      goodEnds[1][i]=goodEnds[1][i+1];
+      score_ends->goodScores[i]=score_ends->goodScores[i+1];
+      score_ends->goodEnds[0][i]=score_ends->goodEnds[0][i+1];
+      score_ends->goodEnds[1][i]=score_ends->goodEnds[1][i+1];
     }
-    report--;
+    score_ends->report--;
   }
 
   // debug code, V[j] typically should not be this high
@@ -64,31 +70,31 @@ void considerAdding(int V[], int minSeparation, int i, int j, int main_index, in
   //printf("adding element: %i at index: %i\n", V[j], report);
   
   // add a new point
-  goodScores[report]=V[j];
-  goodEnds[0][report]=main_index;
-  goodEnds[1][report]=match_index;
-  report++;
+  score_ends->goodScores[score_ends->report]=score;
+  score_ends->goodEnds[0][score_ends->report]=main_index;
+  score_ends->goodEnds[1][score_ends->report]=match_index;
+  score_ends->report++;
 
   // When the table is full, sort and discard all but the best end points.
   // Keep the table in entry order, just compact-out the discarded entries.
-  if(report == sortReports)
+  if(score_ends->report == score_ends->size)
   {
     int worst_keeper;
     int new_best_index=0;
 
-    int *index_array = malloc(sortReports*sizeof(int));
-    int *sorted_array = malloc(sortReports*sizeof(int));
-    int *best_index = malloc(sortReports*sizeof(int));
+    int *index_array = malloc(score_ends->size*sizeof(int));
+    int *sorted_array = malloc(score_ends->size*sizeof(int));
+    int *best_index = malloc(score_ends->size*sizeof(int));
 
     sorted_array[0]=0;
 
-    memcpy(sorted_array, goodScores, sizeof(int)*sortReports);
-    index_sort(sorted_array, index_array, report);
+    memcpy(sorted_array, score_ends->goodScores, sizeof(int)*score_ends->size);
+    index_sort(sorted_array, index_array, score_ends->report);
 
-    worst_keeper = sortReports - maxReports;
+    worst_keeper = score_ends->size - maxReports;
     //*minScore = sorted_array[worst_keeper] + 1;
 
-    for(int index_for_index=worst_keeper; index_for_index < sortReports; index_for_index++)
+    for(int index_for_index=worst_keeper; index_for_index < score_ends->size; index_for_index++)
     {
       best_index[new_best_index] = index_array[index_for_index];
       new_best_index++;
@@ -97,21 +103,16 @@ void considerAdding(int V[], int minSeparation, int i, int j, int main_index, in
     sort(best_index, new_best_index);
     for(int idx=0; idx < new_best_index; idx++)
     {
-      goodScores[idx] = goodScores[best_index[idx]];
-      goodEnds[0][idx]=goodEnds[0][best_index[idx]];
-      goodEnds[1][idx]=goodEnds[1][best_index[idx]];
+      score_ends->goodScores[idx] =score_ends->goodScores[best_index[idx]];
+      score_ends->goodEnds[0][idx]=score_ends->goodEnds[0][best_index[idx]];
+      score_ends->goodEnds[1][idx]=score_ends->goodEnds[1][best_index[idx]];
     }
-    report = maxReports;
+    score_ends->report = maxReports;
 
     free(index_array);
     free(sorted_array);
     free(best_index);
   } 
-
- out:
-#ifdef USE_PTHREADS
-  pthread_mutex_unlock(&adder_lock);
-#endif
 }
 
 /* release_good_match:
@@ -296,14 +297,12 @@ typedef struct
 {
   seq_data_t *seq_data;
   sim_matrix_t *sim_matrix;
-  int *working_good_scores;
-  int *working_good_ends[2];
+  current_ends_t *good_ends;
   int search_length;
   int max_match;
   int start_offset;
   int min_score;
   int min_separation;
-  int sort_reports;
   int max_reports;
 } payload_t;
 
@@ -312,7 +311,6 @@ void *pairwise_worker(void *data)
   payload_t *in_data = (payload_t *)data;
   int *mainSeq = in_data->seq_data->main;
   int *matchSeq = in_data->seq_data->match;
-  int sortReports = in_data->sort_reports;
   int maxReports = in_data->max_reports;
   int gapExtend = in_data->sim_matrix->gapExtend;
   int gapFirst = in_data->sim_matrix->gapStart + gapExtend;
@@ -323,10 +321,7 @@ void *pairwise_worker(void *data)
   int *V = malloc(sizeof(int)*(in_data->search_length+in_data->max_match));
   int minScore = in_data->min_score;
   int minSeparation = in_data->min_separation;
-  int *working_good_ends[2];
-  int *working_good_scores = in_data->working_good_scores;
-  working_good_ends[0] = in_data->working_good_ends[0];
-  working_good_ends[1] = in_data->working_good_ends[1];
+  current_ends_t *good_ends = in_data->good_ends;
   int start;
   int search_length;
   int primer_length;
@@ -383,7 +378,7 @@ void *pairwise_worker(void *data)
          (j == m-1 || i == n-1 || in_data->sim_matrix->similarity[mainSeq[i+1]][matchSeq[j+start+1]] <= 0) && j >= primer_length )
       {
         // update goodScores/goodEnds
-        considerAdding(V, minSeparation, i, j, i, j+start, sortReports, maxReports, working_good_ends, working_good_scores);
+        considerAdding(V[j], minSeparation, i, j+start, maxReports, good_ends);
       }
       // find the best weight assuming a gap in mainSeq
       compare_a = E - gapExtend;
@@ -403,41 +398,27 @@ void *pairwise_worker(void *data)
 
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation, int threads)
 {
-  good_match_t *answer = malloc(sizeof(good_match_t));
   int sortReports = maxReports * 3;
-  int *index_array = malloc(sortReports * sizeof(int));
-  int *sort_array = malloc(sortReports * sizeof(int));
-  answer->simMatrix = sim_matrix;
-  answer->seqData = seq_data;
-  answer->goodEnds[0] = malloc(sizeof(int)*maxReports);
-  answer->goodEnds[1] = malloc(sizeof(int)*maxReports);
-  answer->goodScores = malloc(sizeof(int)*maxReports);
-
-  memset(answer->goodEnds[0], 0, sizeof(int)*maxReports);
-  memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
-  memset(answer->goodScores, 0, sizeof(int)*maxReports);
+  int max_values=0;
+  int **index_array = malloc(threads * sizeof(int *));
+  int **sort_array = malloc(threads * sizeof(int *));
+  good_match_t *answer;
 
   int min_size = (seq_data->mainLen/threads);
   int big_runs = (seq_data->mainLen%threads);
-  int small_runs = (threads-big_runs);
 
   pthread_t *pairwise_threads = malloc(sizeof(pthread_t)*threads);
   payload_t **payloads = malloc(sizeof(payload_t *)*threads);
   payload_t staging;
 
   memset(&staging, '\0', sizeof(payload_t));
-  staging.sort_reports = sortReports;
   staging.max_reports = maxReports;
   staging.sim_matrix = sim_matrix;
   staging.seq_data = seq_data;
   staging.min_score = minScore;
   staging.min_separation = minSeparation;
-  staging.working_good_scores = malloc(sizeof(int)*sortReports);
-  staging.working_good_ends[0] = malloc(sizeof(int *)*sortReports);
-  staging.working_good_ends[1] = malloc(sizeof(int *)*sortReports);
   staging.max_match = sim_matrix->matchLimit;
 
-  memset(staging.working_good_scores,0,sortReports*sizeof(int));
   answer->bestEnds[0] = NULL;
   answer->bestStarts[0] = NULL;
   answer->bestEnds[1] = NULL;
@@ -448,14 +429,18 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   int worst, compare_a;
   int good_index = 0;
 
-  pthread_mutex_init(&adder_lock, NULL);
-
   for(int idx=0; idx < big_runs; idx++)
   {
     payloads[idx] = malloc(sizeof(payload_t));
     memcpy(payloads[idx], &staging, sizeof(payload_t));
     payloads[idx]->start_offset=(min_size+1)*idx;
     payloads[idx]->search_length=min_size+1;
+    payloads[idx]->good_ends = malloc(sizeof(current_ends_t));
+    payloads[idx]->good_ends->size = sortReports;
+    payloads[idx]->good_ends->report = 0;
+    payloads[idx]->good_ends->goodScores = malloc(sizeof(int)*sortReports);
+    payloads[idx]->good_ends->goodEnds[0] = malloc(sizeof(int)*sortReports);
+    payloads[idx]->good_ends->goodEnds[1] = malloc(sizeof(int)*sortReports);
     pthread_create(&(pairwise_threads[idx]),NULL, pairwise_worker, payloads[idx]);
   }
 
@@ -465,34 +450,89 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
     memcpy(payloads[idx], &staging, sizeof(payload_t));
     payloads[idx]->start_offset=((min_size+1)*big_runs)+(min_size*(idx-big_runs));
     payloads[idx]->search_length=min_size;
+    payloads[idx]->good_ends = malloc(sizeof(current_ends_t));
+    payloads[idx]->good_ends->size = sortReports;
+    payloads[idx]->good_ends->report = 0;
+    payloads[idx]->good_ends->goodScores = malloc(sizeof(int)*sortReports);
+    payloads[idx]->good_ends->goodEnds[0] = malloc(sizeof(int)*sortReports);
+    payloads[idx]->good_ends->goodEnds[1] = malloc(sizeof(int)*sortReports);
     pthread_create(&(pairwise_threads[idx]),NULL, pairwise_worker, payloads[idx]);
   }
 
   for(int idx=0; idx < threads; idx++)
   {
     pthread_join(pairwise_threads[idx], NULL);
+    index_array[idx] = malloc(sortReports * sizeof(int));
+    sort_array[idx] = malloc(sortReports * sizeof(int));
+    memset(sort_array[idx], 0, sizeof(int)*sortReports);
+    memcpy(sort_array[idx], payloads[idx]->good_ends->goodScores, payloads[idx]->good_ends->report * sizeof(int));
+    memset(index_array[idx], 0, sizeof(int)*sortReports);
+    index_sort(sort_array[idx], index_array[idx], payloads[idx]->good_ends->report);
+    max_values+=payloads[idx]->good_ends->report;
   }
 
-  memcpy(sort_array, staging.working_good_scores, sortReports * sizeof(int));
+  answer = malloc(sizeof(good_match_t));
+  answer->simMatrix = sim_matrix;
+  answer->seqData = seq_data;
+  answer->goodEnds[0] = malloc(sizeof(int)*maxReports);
+  answer->goodEnds[1] = malloc(sizeof(int)*maxReports);
+  answer->goodScores = malloc(sizeof(int)*maxReports);
+
+  memset(answer->goodEnds[0], 0, sizeof(int)*maxReports);
+  memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
+  memset(answer->goodScores, 0, sizeof(int)*maxReports);
+
+
+  if(max_values > maxReports) max_values = maxReports;
+
+  for(int idx=0; idx < max_values; idx++)
+  {
+    good_index = 0;
+    compare_a = sort_array[0][payloads[0]->good_ends->report-1];
+    for(int tdx=1; tdx < threads; tdx++)
+    {
+      if(payloads[tdx]->good_ends->report == 0) continue;
+      if(sort_array[tdx][payloads[tdx]->good_ends->report-1] > compare_a)
+      {
+        compare_a = sort_array[tdx][payloads[tdx]->good_ends->report-1];
+        good_index = tdx;
+      }
+    }
+    answer->goodScores[idx] = payloads[good_index]->good_ends->goodScores[index_array[good_index][payloads[good_index]->good_ends->report-1]];
+    answer->goodEnds[0][idx] = payloads[good_index]->good_ends->goodEnds[0][index_array[good_index][payloads[good_index]->good_ends->report-1]];
+    answer->goodEnds[1][idx] = payloads[good_index]->good_ends->goodEnds[1][index_array[good_index][payloads[good_index]->good_ends->report-1]];
+    payloads[good_index]->good_ends->report--;
+  }
+
+  /*
+  memcpy(sort_array, staging.good_ends->goodScores, sortReports * sizeof(int));
   memset(index_array, 0, sizeof(int)*sortReports);
-  index_sort(sort_array, index_array, report);
-  compare_a = report - maxReports;
+  index_sort(sort_array, index_array, staging.good_ends->report);
+  compare_a = staging.good_ends->report - maxReports;
   worst = compare_a > 0 ? compare_a : 0;
   good_index = 0;
-  for(int idx = report-1; idx >= worst; idx--)
+
+  for(int idx = staging.good_ends->report-1; idx >= worst; idx--)
   {
-    answer->goodScores[good_index] = staging.working_good_scores[index_array[idx]];
-    answer->goodEnds[0][good_index] = staging.working_good_ends[0][index_array[idx]];
-    answer->goodEnds[1][good_index] = staging.working_good_ends[1][index_array[idx]];
+    answer->goodScores[good_index] = staging.good_ends->goodScores[index_array[idx]];
+    answer->goodEnds[0][good_index] = staging.good_ends->goodEnds[0][index_array[idx]];
+    answer->goodEnds[1][good_index] = staging.good_ends->goodEnds[1][index_array[idx]];
     good_index++;
   }
+  */
 
-  free(staging.working_good_scores);
-  free(staging.working_good_ends[0]);
-  free(staging.working_good_ends[1]);
+  for(int idx=0; idx < threads; idx++)
+  {
+    free(payloads[idx]->good_ends->goodScores);
+    free(payloads[idx]->good_ends->goodEnds[0]);
+    free(payloads[idx]->good_ends->goodEnds[1]);
+    free(payloads[idx]->good_ends);
+    free(payloads[idx]);
+  }
+  free(payloads);
   free(sort_array);
   free(index_array);
-  answer->numReports = good_index;
+  answer->numReports = max_values;
   return answer;
 }
 #endif
