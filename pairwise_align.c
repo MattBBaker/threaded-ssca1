@@ -419,13 +419,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   staging.min_separation = minSeparation;
   staging.max_match = sim_matrix->matchLimit;
 
-  answer->bestEnds[0] = NULL;
-  answer->bestStarts[0] = NULL;
-  answer->bestEnds[1] = NULL;
-  answer->bestStarts[1] = NULL;
-  answer->bestSeqs = NULL;
-  answer->bestScores = NULL;
-
   int worst, compare_a;
   int good_index = 0;
 
@@ -477,6 +470,13 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   answer->goodEnds[0] = malloc(sizeof(int)*maxReports);
   answer->goodEnds[1] = malloc(sizeof(int)*maxReports);
   answer->goodScores = malloc(sizeof(int)*maxReports);
+
+  answer->bestEnds[0] = NULL;
+  answer->bestStarts[0] = NULL;
+  answer->bestEnds[1] = NULL;
+  answer->bestStarts[1] = NULL;
+  answer->bestSeqs = NULL;
+  answer->bestScores = NULL;
 
   memset(answer->goodEnds[0], 0, sizeof(int)*maxReports);
   memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
