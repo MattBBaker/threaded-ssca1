@@ -278,8 +278,9 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
  * Report the score, start-pair, end-pair, and alignment for the best of these.
  */
 
-void locateSeq(good_match_t *A, int report_number, int *report, int minScore, int maxReports, int minSeparation, int maxMatch, good_match_t *S)
+void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports, int minSeparation, int maxMatch, good_match_t *S)
 {
+  int report = 0;
   int sortReports = maxReports * 3;
   int gapFirst = A->simMatrix->gapExtend + A->simMatrix->gapStart;
   // allocating from the heap, because large values of sortReports causes the stack to explode
@@ -306,15 +307,15 @@ void locateSeq(good_match_t *A, int report_number, int *report, int minScore, in
   short T[maxResult][sequence_length];
   memset(T, 0, maxResult*sequence_length*sizeof(short));
 
-  int V[sequence_length];
-  int F[sequence_length];
-  int G[sequence_length];
-  int E[sequence_length];
-  int Vg[sequence_length];
+  int *V = malloc(sizeof(int)*sequence_length);
+  int *F = malloc(sizeof(int)*sequence_length);
+  int *G = malloc(sizeof(int)*sequence_length);
+  int *E = malloc(sizeof(int)*sequence_length);
+  int *Vg = malloc(sizeof(int)*sequence_length);
   int adder, iT;
   int worst;
-  int sorted_array[maxReports];
-  int index_array[maxReports];
+  int *sorted_array;// = malloc(sizeof(int)*maxReports);
+  int *index_array;// = malloc(sizeof(int)*maxReports);
 
   // previous kernels will insert hyphens into sequences to mark where a codon was inserted/deleted.  Clean those hyphens out
   int tidy_length = scrub_hyphens(A, matchSeq, A->bestSeqs[report_number].match, A->bestSeqs[report_number].length);
@@ -378,39 +379,46 @@ void locateSeq(good_match_t *A, int report_number, int *report, int minScore, in
     */
 
     // if the match is good enough- consider adding it
+    //printf("[%i]Thinking of adding, report=%i score=%i\n", report_number, report, V[tidy_length-1]);
     if(V[tidy_length-1] >= minScore)
     {
-      considerAdding_s(A, report, sortReports, maxReports, working_starts, working_ends, working_seqs, working_scores, 
+      //printf("[%i]Adding, report=%i, score=%i\n", report_number, report, V[tidy_length-1]);
+      considerAdding_s(A, &report, sortReports, maxReports, working_starts, working_ends, working_seqs, working_scores, 
                        &minScore, minSeparation, V, idx, tidy_length-1, maxResult, sequence_length, T, mainSeq, matchSeq);
+      //printf("[%i]Finished adding, report is now=%i\n", report_number, report);
     }
+    //printf("[%i]Done thinking\n", report_number);
   }
 
   // once everything is done, add the sequences to the S array.
 
-  if(*report!=0)
-  {
-    memcpy(sorted_array, working_scores, maxReports * sizeof(int));
-    index_sort(sorted_array, index_array, *report);
-    worst = (*report - maxReports) > 0 ? *report - maxReports : 0;
-    S->bestScores = malloc(*report * sizeof(int));
-    S->bestStarts[0] = malloc(*report * sizeof(int));
-    S->bestStarts[1] = malloc(*report * sizeof(int));
-    S->bestEnds[0] = malloc(*report * sizeof(int));
-    S->bestEnds[1] = malloc(*report * sizeof(int));
-    S->bestSeqs = malloc(*report * sizeof(seq_t));
+  index_array = malloc(sizeof(int)*report);
+  sorted_array = malloc(sizeof(int)*report);
 
-    for(int jdx=*report-1; jdx >= 0; jdx--)
+  if(report!=0)
+  {
+    memcpy(sorted_array, working_scores, report * sizeof(int));
+    index_sort(sorted_array, index_array, report);
+    worst = (report - maxReports) > 0 ? report - maxReports : 0;
+    S->bestScores = malloc(report * sizeof(int));
+    S->bestStarts[0] = malloc(report * sizeof(int));
+    S->bestStarts[1] = malloc(report * sizeof(int));
+    S->bestEnds[0] = malloc(report * sizeof(int));
+    S->bestEnds[1] = malloc(report * sizeof(int));
+    S->bestSeqs = malloc(report * sizeof(seq_t));
+
+    for(int jdx=report-1; jdx >= 0; jdx--)
     {
-      S->bestScores[*report-jdx-1]=working_scores[index_array[jdx]];
-      S->bestStarts[0][*report-jdx-1]=working_starts[0][index_array[jdx]];
-      S->bestStarts[1][*report-jdx-1]=working_starts[1][index_array[jdx]];
-      S->bestEnds[0][*report-jdx-1]=working_ends[0][index_array[jdx]];
-      S->bestEnds[1][*report-jdx-1]=working_ends[1][index_array[jdx]];
-      S->bestSeqs[*report-jdx-1].main = working_seqs[index_array[jdx]].main;
-      S->bestSeqs[*report-jdx-1].match = working_seqs[index_array[jdx]].match;
-      S->bestSeqs[*report-jdx-1].length = working_seqs[index_array[jdx]].length;
+      S->bestScores[report-jdx-1]=working_scores[index_array[jdx]];
+      S->bestStarts[0][report-jdx-1]=working_starts[0][index_array[jdx]];
+      S->bestStarts[1][report-jdx-1]=working_starts[1][index_array[jdx]];
+      S->bestEnds[0][report-jdx-1]=working_ends[0][index_array[jdx]];
+      S->bestEnds[1][report-jdx-1]=working_ends[1][index_array[jdx]];
+      S->bestSeqs[report-jdx-1].main = working_seqs[index_array[jdx]].main;
+      S->bestSeqs[report-jdx-1].match = working_seqs[index_array[jdx]].match;
+      S->bestSeqs[report-jdx-1].length = working_seqs[index_array[jdx]].length;
     }
-    S->bestLength=*report;
+    S->bestLength=report;
   }
 
   free(working_seqs);
@@ -419,6 +427,13 @@ void locateSeq(good_match_t *A, int report_number, int *report, int minScore, in
   free(working_ends[1]);
   free(working_starts[1]);
   free(working_scores);
+  free(V);
+  free(F);
+  free(G);
+  free(E);
+  free(Vg);
+  free(sorted_array);
+  free(index_array);
 }
 
 /*
@@ -471,15 +486,13 @@ void locateSeq(good_match_t *A, int report_number, int *report, int minScore, in
 
 void locateSimilar(good_match_t *A, int minScore, int maxReports, int minSeparation, int maxMatch, good_match_t *S[])
 {
-  int report;
 #ifdef _OPENMP
-#pragma omp parallel for private(report)
+#pragma omp parallel for
 #endif
   for(int idx=0; idx < A->bestLength; idx++)
   {
-    report=0;
     S[idx] = malloc(sizeof(good_match_t));
     memset(S[idx], 0, sizeof(good_match_t));
-    locateSeq(A, idx, &report, minScore, maxReports, minSeparation, maxMatch, S[idx]);
+    locateSeq(A, idx, minScore, maxReports, minSeparation, maxMatch, S[idx]);
   }
 }
