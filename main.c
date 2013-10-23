@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
 
-  A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION, global_parameters.threads);
+  A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
 
   display_elapsed(&start_time);
 

@@ -164,158 +164,124 @@ typedef struct
 
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
 
-void *pairwise_worker(void *data) {
-  payload_t *in_data = (payload_t *)data;
-  int *mainSeq = in_data->seq_data->main;
-  int *matchSeq = in_data->seq_data->match;
-  int maxReports = in_data->max_reports;
-  int gapExtend = in_data->sim_matrix->gapExtend;
-  int gapFirst = in_data->sim_matrix->gapStart + gapExtend;
-  int minScore = in_data->min_score;
-  int minSeparation = in_data->min_separation;
-  current_ends_t *good_ends = in_data->good_ends;
-  int *score_matrix = malloc(sizeof(int)*3*in_data->seq_data->matchLen);
-  int *match_gap_matrix = malloc(sizeof(int)*2*in_data->seq_data->matchLen);
-  int *main_gap_matrix = malloc(sizeof(int)*2*in_data->seq_data->matchLen);
+//void *pairwise_worker(void *data) {
+good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation) {
+  const int sortReports = maxReports * 3;
+  const int *mainSeq = seq_data->main;
+  const int *matchSeq = seq_data->match;
+  const int gapExtend = sim_matrix->gapExtend;
+  const int gapFirst = sim_matrix->gapStart + gapExtend;
+  current_ends_t *good_ends = malloc(sizeof(current_ends_t));
+  good_ends->size = sortReports;
+  good_ends->report = 0;
+  good_ends->goodScores = malloc(sizeof(int)*sortReports);
+  good_ends->goodEnds[0] = malloc(sizeof(int)*sortReports);
+  good_ends->goodEnds[1] = malloc(sizeof(int)*sortReports);
+
+  int *score_matrix = malloc(sizeof(int)*3*seq_data->matchLen);
+  int *match_gap_matrix = malloc(sizeof(int)*2*seq_data->matchLen);
+  int *main_gap_matrix = malloc(sizeof(int)*2*seq_data->matchLen);
   long score_start, score_end;
   int G, W, E, F, cmp_a, cmp_b;
   long m, n;
-
-  W = in_data->sim_matrix->similarity[mainSeq[0]][matchSeq[0]];
-  score_matrix[index2d(0,0,in_data->seq_data->matchLen)] = 0 > W ? 0 : W;
-  main_gap_matrix[0] = -gapFirst + W;
-  match_gap_matrix[0] = -gapFirst + W;
-
-  W = in_data->sim_matrix->similarity[mainSeq[0]][matchSeq[1]];
-  G = W;
-  E = main_gap_matrix[index2d(0,0,in_data->seq_data->matchLen)];
-  cmp_a = 0 > E ? 0 : E;
-  cmp_a = cmp_a > G ? cmp_a : G;
-  score_matrix[index2d(1,1,in_data->seq_data->matchLen)] = cmp_a;
-  cmp_a = E - gapExtend;
-  cmp_b = G - gapFirst;
-  main_gap_matrix[index2d(1,0,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-  match_gap_matrix[index2d(1,0,in_data->seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
-
-  W = in_data->sim_matrix->similarity[mainSeq[1]][matchSeq[0]];
-  G = W;
-  F = match_gap_matrix[index2d(0,0,in_data->seq_data->matchLen)];
-  cmp_a = 0 > F ? 0 : F;
-  cmp_a = cmp_a > G ? cmp_a : G;
-  score_matrix[index2d(1,0,in_data->seq_data->matchLen)] = cmp_a;
-  cmp_a = F - gapExtend;
-  cmp_b = G - gapFirst;
-  main_gap_matrix[index2d(1,1,in_data->seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
-  match_gap_matrix[index2d(1,1,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-  
-  for(int idx=2; idx < in_data->seq_data->matchLen * 2; idx++) {
-    score_start = (idx-(in_data->seq_data->matchLen-1)) > 0 ? (idx-(in_data->seq_data->matchLen-1)) : 0;
-    score_end = (idx) < (in_data->seq_data->matchLen-1) ? (idx) : (in_data->seq_data->matchLen-1);
-    if(idx < in_data->seq_data->matchLen) {
-      m = 0;
-      n = idx;
-      W = in_data->sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
-      G = W;
-      F = match_gap_matrix[index2d((idx-1)%2,n-1,in_data->seq_data->matchLen)];
-      cmp_a = F > 0 ? F : 0;
-      cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)] = cmp_a;
-      if((W > 0 && cmp_a > minScore && cmp_a == G) &&
-         ((m == in_data->seq_data->matchLen - 1) || (n == in_data->seq_data->matchLen - 1) ||
-          (in_data->sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-        considerAdding(score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
-      }
-      cmp_a = F - gapExtend;
-      cmp_b = G - gapFirst;
-      match_gap_matrix[index2d(idx%2,n,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-      score_start = score_start+1;
-
-      m = idx;
-      n = 0;
-      E = main_gap_matrix[index2d((idx-1)%2,m-1,in_data->seq_data->matchLen)];
-      cmp_a = E > 0 ? E : 0;
-      cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)] = cmp_a;
-      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
-         ((m == in_data->seq_data->matchLen - 1) || (n == in_data->seq_data->matchLen - 1) ||
-          (in_data->sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-        considerAdding(score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
-      }
-      cmp_a = E - gapExtend;
-      cmp_b = G - gapFirst;
-      main_gap_matrix[index2d(idx%2,m,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-      score_end = score_end - 1;
-    }
-
-#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) schedule(static)
-    for(int antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
-      m = antidiagonal;
-      n = idx - m;
-
-      W = in_data->sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
-      G = score_matrix[index2d(((idx-2)%3),m-1,in_data->seq_data->matchLen)] + W;
-      F = match_gap_matrix[index2d((idx-1)%2,n-1,in_data->seq_data->matchLen)];
-      E = main_gap_matrix[index2d((idx-1)%2,m-1,in_data->seq_data->matchLen)];
-      cmp_a = 0;
-      cmp_a = cmp_a > E ? cmp_a : E;
-      cmp_a = cmp_a > F ? cmp_a : F;
-      cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)] = cmp_a;
-      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
-         ((m == in_data->seq_data->matchLen - 1) || (n == in_data->seq_data->matchLen - 1) ||
-          (in_data->sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-#pragma omp critical
-        considerAdding(score_matrix[index2d((idx%3),m,in_data->seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
-      }
-      cmp_a = E - gapExtend;
-      cmp_b = G - gapFirst;
-      main_gap_matrix[index2d((idx)%2,m,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-      cmp_a = F - gapExtend;
-      match_gap_matrix[index2d((idx)%2,n,in_data->seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-    }
-  }
-
-  free(score_matrix);
-  free(main_gap_matrix);
-  free(match_gap_matrix);
-  return NULL;
-}
-
-good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation, int threads)
-{
-  int sortReports = maxReports * 3;
   int max_values=0;
   int *index_array;
   int *sort_array;
   good_match_t *answer;
 
-  payload_t staging;
+  W = sim_matrix->similarity[mainSeq[0]][matchSeq[0]];
+  score_matrix[index2d(0,0,seq_data->matchLen)] = 0 > W ? 0 : W;
+  main_gap_matrix[0] = -gapFirst + W;
+  match_gap_matrix[0] = -gapFirst + W;
 
-  memset(&staging, '\0', sizeof(payload_t));
-  staging.max_reports = maxReports;
-  staging.sim_matrix = sim_matrix;
-  staging.seq_data = seq_data;
-  staging.min_score = minScore;
-  staging.min_separation = minSeparation;
-  staging.max_match = sim_matrix->matchLimit;
-  staging.start_offset=0;
-  staging.search_length=seq_data->mainLen;
-  staging.good_ends = malloc(sizeof(current_ends_t));
-  staging.good_ends->size = sortReports;
-  staging.good_ends->report = 0;
-  staging.good_ends->goodScores = malloc(sizeof(int)*sortReports);
-  staging.good_ends->goodEnds[0] = malloc(sizeof(int)*sortReports);
-  staging.good_ends->goodEnds[1] = malloc(sizeof(int)*sortReports);
+  W = sim_matrix->similarity[mainSeq[0]][matchSeq[1]];
+  G = W;
+  E = main_gap_matrix[index2d(0,0,seq_data->matchLen)];
+  cmp_a = 0 > E ? 0 : E;
+  cmp_a = cmp_a > G ? cmp_a : G;
+  score_matrix[index2d(1,1,seq_data->matchLen)] = cmp_a;
+  cmp_a = E - gapExtend;
+  cmp_b = G - gapFirst;
+  main_gap_matrix[index2d(1,0,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+  match_gap_matrix[index2d(1,0,seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
 
-  pairwise_worker(&staging);
+  W = sim_matrix->similarity[mainSeq[1]][matchSeq[0]];
+  G = W;
+  F = match_gap_matrix[index2d(0,0,seq_data->matchLen)];
+  cmp_a = 0 > F ? 0 : F;
+  cmp_a = cmp_a > G ? cmp_a : G;
+  score_matrix[index2d(1,0,seq_data->matchLen)] = cmp_a;
+  cmp_a = F - gapExtend;
+  cmp_b = G - gapFirst;
+  main_gap_matrix[index2d(1,1,seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
+  match_gap_matrix[index2d(1,1,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+  
+  for(int idx=2; idx < seq_data->matchLen * 2; idx++) {
+    score_start = (idx-(seq_data->matchLen-1)) > 0 ? (idx-(seq_data->matchLen-1)) : 0;
+    score_end = (idx) < (seq_data->matchLen-1) ? (idx) : (seq_data->matchLen-1);
+    if(idx < seq_data->matchLen) {
+      m = 0;
+      n = idx;
+      W = sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
+      G = W;
+      F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->matchLen)];
+      cmp_a = F > 0 ? F : 0;
+      cmp_a = cmp_a > G ? cmp_a : G;
+      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
+      if((W > 0 && cmp_a > minScore && cmp_a == G) &&
+         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+          (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
+        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
+      }
+      cmp_a = F - gapExtend;
+      cmp_b = G - gapFirst;
+      match_gap_matrix[index2d(idx%2,n,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      score_start = score_start+1;
 
-  index_array = malloc(sortReports * sizeof(int));
-  sort_array = malloc(sortReports * sizeof(int));
-  memset(sort_array, 0, sizeof(int)*sortReports);
-  memcpy(sort_array, staging.good_ends->goodScores, staging.good_ends->report * sizeof(int));
-  memset(index_array, 0, sizeof(int)*sortReports);
-  index_sort(sort_array, index_array, staging.good_ends->report);
-  max_values+=staging.good_ends->report;
+      m = idx;
+      n = 0;
+      E = main_gap_matrix[index2d((idx-1)%2,m-1,seq_data->matchLen)];
+      cmp_a = E > 0 ? E : 0;
+      cmp_a = cmp_a > G ? cmp_a : G;
+      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
+      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
+         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+          (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
+        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
+      }
+      cmp_a = E - gapExtend;
+      cmp_b = G - gapFirst;
+      main_gap_matrix[index2d(idx%2,m,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      score_end = score_end - 1;
+    }
+
+#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) firstprivate(idx, score_matrix, sim_matrix, main_gap_matrix, match_gap_matrix, gapFirst, gapExtend, seq_data, minScore, minSeperation, maxReports, good_ends) schedule(static)
+    for(int antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
+      m = antidiagonal;
+      n = idx - m;
+
+      W = sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
+      G = score_matrix[index2d(((idx-2)%3),m-1,seq_data->matchLen)] + W;
+      F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->matchLen)];
+      E = main_gap_matrix[index2d((idx-1)%2,m-1,seq_data->matchLen)];
+      cmp_a = 0;
+      cmp_a = cmp_a > E ? cmp_a : E;
+      cmp_a = cmp_a > F ? cmp_a : F;
+      cmp_a = cmp_a > G ? cmp_a : G;
+      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
+      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
+         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+          (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
+#pragma omp critical
+        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
+      }
+      cmp_a = E - gapExtend;
+      cmp_b = G - gapFirst;
+      main_gap_matrix[index2d((idx)%2,m,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      cmp_a = F - gapExtend;
+      match_gap_matrix[index2d((idx)%2,n,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+    }
+  }
 
   answer = malloc(sizeof(good_match_t));
   answer->simMatrix = sim_matrix;
@@ -335,20 +301,31 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   answer->bestSeqs = NULL;
   answer->bestScores = NULL;
 
+  max_values=good_ends->report;
 
   if(max_values > maxReports) max_values = maxReports;
 
-  for(int idx=0; idx < max_values; idx++)
-  {
-    answer->goodScores[idx] = staging.good_ends->goodScores[index_array[staging.good_ends->report-(idx+1)]];
-    answer->goodEnds[0][idx] = staging.good_ends->goodEnds[0][index_array[staging.good_ends->report-(idx+1)]];
-    answer->goodEnds[1][idx] = staging.good_ends->goodEnds[1][index_array[staging.good_ends->report-(idx+1)]];
+  index_array = malloc(sortReports * sizeof(int));
+  sort_array = malloc(sortReports * sizeof(int));
+  memset(sort_array, 0, sizeof(int)*sortReports);
+  memcpy(sort_array, good_ends->goodScores, good_ends->report * sizeof(int));
+  memset(index_array, 0, sizeof(int)*sortReports);
+  index_sort(sort_array, index_array, good_ends->report);
+
+  for(int idx=0; idx < max_values; idx++) {
+    answer->goodScores[idx] = good_ends->goodScores[index_array[good_ends->report-(idx+1)]];
+    answer->goodEnds[0][idx] = good_ends->goodEnds[0][index_array[good_ends->report-(idx+1)]];
+    answer->goodEnds[1][idx] = good_ends->goodEnds[1][index_array[good_ends->report-(idx+1)]];
   }
 
-  free(staging.good_ends->goodScores);
-  free(staging.good_ends->goodEnds[0]);
-  free(staging.good_ends->goodEnds[1]);
-  free(staging.good_ends);
+
+  free(score_matrix);
+  free(main_gap_matrix);
+  free(match_gap_matrix);
+  free(good_ends->goodScores);
+  free(good_ends->goodEnds[0]);
+  free(good_ends->goodEnds[1]);
+  free(good_ends);
 
   free(sort_array);
   free(index_array);
