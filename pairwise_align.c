@@ -255,7 +255,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
       score_end = score_end - 1;
     }
 
-#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) firstprivate(idx, score_matrix, sim_matrix, main_gap_matrix, match_gap_matrix, gapFirst, gapExtend, seq_data, minScore, minSeperation, maxReports, good_ends) schedule(static)
+#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) firstprivate(idx, score_matrix, sim_matrix, main_gap_matrix, match_gap_matrix, seq_data, minScore, minSeparation, maxReports, good_ends) schedule(static)
     for(int antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
       m = antidiagonal;
       n = idx - m;
