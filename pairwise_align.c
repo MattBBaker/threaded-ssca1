@@ -260,6 +260,8 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
       m = antidiagonal;
       n = idx - m;
 
+      //W is the score for the current match. G is the current match added to the previous score.
+      //F is the score with a gap in the match sequence and E is the score with a gap in the main sequence
       W = sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
       G = score_matrix[index2d(((idx-2)%3),m-1,seq_data->matchLen)] + W;
       F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->matchLen)];
@@ -275,6 +277,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
 #pragma omp critical
         considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
       }
+      //cmp_b covers a new gap, while cmp_a covers extending a previous gap.
       cmp_a = E - gapExtend;
       cmp_b = G - gapFirst;
       main_gap_matrix[index2d((idx)%2,m,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
