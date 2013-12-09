@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 
   printf("HPCS SSCA #1 Bioinformatics Sequence Alignment Executable Specification:\nRunning...\n");
 
-  if(global_parameters.ENABLE_VERIF)
+  if(global_parameters.ENABLE_VERIF || global_parameters.CONSTANT_RNG)
   {
     printf("\n\tVerification run, using constant seed for RNG\n");
     // interesting values that have uncovered bugs in the past,
