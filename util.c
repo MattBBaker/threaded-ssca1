@@ -1,5 +1,23 @@
+#include <util.h>
 #include <pairwise_align.h>
 #include <string.h>
+#include <unistd.h>
+
+/*
+  Fair note, this routine will cause memory utilities like Valgrind to whine viciously about
+  reads in uninitalized memory. This is because it is correct, this utility will just read
+  bytes in page size increments to fault in all pages and get real backing memory for them.
+  This causes no real problem, since the uninitalized bytes read don't do anything.
+*/
+void touch_memory(void *mem, size_t size) {
+  index_t page_size = sysconf(_SC_PAGESIZE);
+  index_t *this_memory = (index_t *)mem;
+  index_t size_increment = page_size / sizeof(index_t);
+  index_t size_max = size / sizeof(index_t);
+  for(index_t idx=0; idx < size_max; idx+=size_increment) {
+    this_memory[idx] = 0;
+  }
+}
 
 /* Fix up a sequence to remove the gaps
    Input-
@@ -12,9 +30,9 @@
         int (return value) - size of dest
 */
 
-int scrub_hyphens(good_match_t *A, int *dest, int *source, int length)
+index_t scrub_hyphens(good_match_t *A, codon_t *dest, codon_t *source, index_t length)
 {
-  int source_index=0, dest_index=0;
+  index_t source_index=0, dest_index=0;
   while(source_index < length)
   {
     while(source_index < length && source[source_index] == A->simMatrix->hyphen) source_index++;
@@ -33,7 +51,7 @@ int scrub_hyphens(good_match_t *A, int *dest, int *source, int length)
        int length         - size of the chain
 */
 
-void assemble_acid_chain(good_match_t *A, char *result, int *chain, int length)
+void assemble_acid_chain(good_match_t *A, char *result, codon_t *chain, index_t length)
 {
   memset(result, '\0', length);
   for(int idx=0; idx < length; idx++)
@@ -52,7 +70,7 @@ void assemble_acid_chain(good_match_t *A, char *result, int *chain, int length)
        int length         - size of the chain
 */
 
-void assemble_codon_chain(good_match_t *A, char *result, int *chain, int length)
+void assemble_codon_chain(good_match_t *A, char *result, codon_t *chain, index_t length)
 {
   memset(result, '\0', length);
   for(int idx=0; idx < length; idx++)
@@ -84,9 +102,9 @@ void assemble_codon_chain(good_match_t *A, char *result, int *chain, int length)
        int             - the score of the match
 */
 
-int simple_score(good_match_t *A, int main[], int match[], int length)
+score_t simple_score(good_match_t *A, codon_t main[], codon_t match[], index_t length)
 {
-  int score = 0;
+  score_t score = 0;
   int mainMatch = 1;
   int matchMatch = 1;
   

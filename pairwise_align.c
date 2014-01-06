@@ -13,18 +13,20 @@ See file LICENSING for licensing information.
 #include <sort.h>
 #include <pairwise_align.h>
 #include <string.h>
+#include <util.h>
+#include <assert.h>
 
 typedef struct
 {
-  int *goodEnds[2];
-  int *goodScores;
+  index_t *goodEnds[2];
+  score_t *goodScores;
   int report;
   int size;
 } current_ends_t;
 
 /* consider adding this endpoint, possibly eliminating near by endpoints */
 
-void considerAdding(int score, int minSeparation, int main_index, int match_index, 
+void considerAdding(score_t score, int minSeparation, index_t main_index, index_t match_index, 
                     int maxReports, current_ends_t *score_ends)
 {
   int elements_to_copy;
@@ -68,13 +70,13 @@ void considerAdding(int score, int minSeparation, int main_index, int match_inde
     int worst_keeper;
     int new_best_index=0;
 
-    int *index_array = malloc(score_ends->size*sizeof(int));
-    int *sorted_array = malloc(score_ends->size*sizeof(int));
-    int *best_index = malloc(score_ends->size*sizeof(int));
+    index_t *index_array = (index_t *)malloc(score_ends->size*sizeof(index_t));
+    score_t *sorted_array = (score_t *)malloc(score_ends->size*sizeof(score_t));
+    index_t *best_index = (index_t *)malloc(score_ends->size*sizeof(index_t));
 
     sorted_array[0]=0;
 
-    memcpy(sorted_array, score_ends->goodScores, sizeof(int)*score_ends->size);
+    memcpy(sorted_array, score_ends->goodScores, sizeof(score_t)*score_ends->size);
     index_sort(sorted_array, index_array, score_ends->report);
 
     worst_keeper = score_ends->size - maxReports;
@@ -149,44 +151,41 @@ void release_good_match(good_match_t *doomed)
  *       ->numReports - an integer, the number of reports represented
  */
 
-typedef struct
-{
-  seq_data_t *seq_data;
-  sim_matrix_t *sim_matrix;
-  current_ends_t *good_ends;
-  int search_length;
-  int max_match;
-  int start_offset;
-  int min_score;
-  int min_separation;
-  int max_reports;
-} payload_t;
-
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
 
 //void *pairwise_worker(void *data) {
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation) {
   const int sortReports = maxReports * 3;
-  const int *mainSeq = seq_data->main;
-  const int *matchSeq = seq_data->match;
-  const int gapExtend = sim_matrix->gapExtend;
-  const int gapFirst = sim_matrix->gapStart + gapExtend;
-  current_ends_t *good_ends = malloc(sizeof(current_ends_t));
+  const codon_t *mainSeq = seq_data->main;
+  const codon_t *matchSeq = seq_data->match;
+  const score_t gapExtend = sim_matrix->gapExtend;
+  const score_t gapFirst = sim_matrix->gapStart + gapExtend;
+  current_ends_t *good_ends = (current_ends_t *)malloc(sizeof(current_ends_t));
   good_ends->size = sortReports;
   good_ends->report = 0;
-  good_ends->goodScores = malloc(sizeof(int)*sortReports);
-  good_ends->goodEnds[0] = malloc(sizeof(int)*sortReports);
-  good_ends->goodEnds[1] = malloc(sizeof(int)*sortReports);
+  good_ends->goodScores = (score_t *)malloc(sizeof(score_t)*sortReports);
+  good_ends->goodEnds[0] = (index_t *)malloc(sizeof(index_t)*sortReports);
+  good_ends->goodEnds[1] = (index_t *)malloc(sizeof(index_t)*sortReports);
 
-  int *score_matrix = malloc(sizeof(int)*3*seq_data->matchLen);
-  int *match_gap_matrix = malloc(sizeof(int)*2*seq_data->matchLen);
-  int *main_gap_matrix = malloc(sizeof(int)*2*seq_data->matchLen);
-  long score_start, score_end;
-  int G, W, E, F, cmp_a, cmp_b;
-  long m, n;
+  score_t *score_matrix = (score_t *)malloc(sizeof(score_t)*3*seq_data->matchLen);
+  assert(score_matrix != NULL);
+  score_t *match_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->matchLen);
+  assert(match_gap_matrix != NULL);
+  score_t *main_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->matchLen);
+  assert(main_gap_matrix != NULL);
+  printf("touching score\n");
+  touch_memory(score_matrix, sizeof(score_t)*3*seq_data->matchLen);
+  printf("touching match\n");
+  touch_memory(match_gap_matrix, sizeof(score_t)*2*seq_data->mainLen);
+  printf("touching main\n");
+  touch_memory(main_gap_matrix, sizeof(score_t)*2*seq_data->matchLen);
+  printf("done touching memory\n");
+  index_t score_start, score_end;
+  score_t G, W, E, F, cmp_a, cmp_b;
+  index_t m, n;
   int max_values=0;
-  int *index_array;
-  int *sort_array;
+  index_t *index_array;
+  score_t *sort_array;
   good_match_t *answer;
 
   W = sim_matrix->similarity[mainSeq[0]][matchSeq[0]];
@@ -216,9 +215,9 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   main_gap_matrix[index2d(1,1,seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
   match_gap_matrix[index2d(1,1,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
   
-  for(int idx=2; idx < seq_data->matchLen * 2; idx++) {
-    score_start = (idx-(seq_data->matchLen-1)) > 0 ? (idx-(seq_data->matchLen-1)) : 0;
-    score_end = (idx) < (seq_data->matchLen-1) ? (idx) : (seq_data->matchLen-1);
+  for(index_t idx=2; idx < seq_data->matchLen * 2; idx++) {
+    score_start = idx > (seq_data->matchLen - 1) ? (idx-(seq_data->matchLen-1)) : 0;
+    score_end = idx < (seq_data->matchLen-1) ? (idx) : (seq_data->matchLen-1);
     if(idx < seq_data->matchLen) {
       m = 0;
       n = idx;
@@ -255,8 +254,10 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
       score_end = score_end - 1;
     }
 
+#ifdef _OPENMP
 #pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) firstprivate(idx, score_matrix, sim_matrix, main_gap_matrix, match_gap_matrix, seq_data, minScore, minSeparation, maxReports, good_ends) schedule(static)
-    for(int antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
+#endif
+    for(index_t antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
       m = antidiagonal;
       n = idx - m;
 
@@ -274,7 +275,9 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
       if((cmp_a > minScore && W > 0 && cmp_a == G) &&
          ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
           (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
+#ifdef _OPENMP
 #pragma omp critical
+#endif
         considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends);
       }
       //cmp_b covers a new gap, while cmp_a covers extending a previous gap.
@@ -286,16 +289,16 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
     }
   }
 
-  answer = malloc(sizeof(good_match_t));
+  answer = (good_match_t*)malloc(sizeof(good_match_t));
   answer->simMatrix = sim_matrix;
   answer->seqData = seq_data;
-  answer->goodEnds[0] = malloc(sizeof(int)*maxReports);
-  answer->goodEnds[1] = malloc(sizeof(int)*maxReports);
-  answer->goodScores = malloc(sizeof(int)*maxReports);
+  answer->goodEnds[0] = (index_t*)malloc(sizeof(index_t)*maxReports);
+  answer->goodEnds[1] = (index_t*)malloc(sizeof(index_t)*maxReports);
+  answer->goodScores = (score_t*)malloc(sizeof(score_t)*maxReports);
 
-  memset(answer->goodEnds[0], 0, sizeof(int)*maxReports);
-  memset(answer->goodEnds[1], 0, sizeof(int)*maxReports);
-  memset(answer->goodScores, 0, sizeof(int)*maxReports);
+  memset(answer->goodEnds[0], 0, sizeof(index_t)*maxReports);
+  memset(answer->goodEnds[1], 0, sizeof(index_t)*maxReports);
+  memset(answer->goodScores, 0, sizeof(score_t)*maxReports);
 
   answer->bestEnds[0] = NULL;
   answer->bestStarts[0] = NULL;
@@ -308,11 +311,11 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
 
   if(max_values > maxReports) max_values = maxReports;
 
-  index_array = malloc(sortReports * sizeof(int));
-  sort_array = malloc(sortReports * sizeof(int));
-  memset(sort_array, 0, sizeof(int)*sortReports);
-  memcpy(sort_array, good_ends->goodScores, good_ends->report * sizeof(int));
-  memset(index_array, 0, sizeof(int)*sortReports);
+  index_array = (index_t*)malloc(sortReports * sizeof(index_t));
+  sort_array = (score_t*)malloc(sortReports * sizeof(score_t));
+  memset(sort_array, 0, sizeof(score_t)*sortReports);
+  memcpy(sort_array, good_ends->goodScores, good_ends->report * sizeof(score_t));
+  memset(index_array, 0, sizeof(index_t)*sortReports);
   index_sort(sort_array, index_array, good_ends->report);
 
   for(int idx=0; idx < max_values; idx++) {

@@ -57,7 +57,7 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
         assemble_codon_chain(A, main_codon_chain, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].length);
         assemble_codon_chain(A, match_codon_chain, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].length);
 
-        printf("%7d  %s  %s  %7d\n%7d  %s  %s  %7d\n",
+        printf("%7ld  %s  %s  %7ld\n%7ld  %s  %s  %7ld\n",
                S[b]->bestStarts[0][m], main_acid_chain, main_codon_chain, S[b]->bestEnds[0][m],
                S[b]->bestStarts[1][m], match_acid_chain, match_codon_chain, S[b]->bestEnds[1][m]);
 
@@ -77,15 +77,15 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
  * to merge them?
  */
 
-void tracepath_s(good_match_t *A, int maxResult, int sequence_length, short T[maxResult][sequence_length], int *mainSeq, int *matchSeq, int ci, int cj, int dir, int depth, seq_t *sequence, int rs[2])
+void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_t T[maxResult][sequence_length], codon_t *mainSeq, codon_t *matchSeq, int ci, int cj, int dir, int depth, seq_t *sequence, int rs[2])
 {
   int Ci, Cj, iT;
   if(ci== -1 || cj == -1 || depth >= maxResult)  // if done
   {
     rs[0] = ci+1;
     rs[1] = cj+1;
-    sequence->main = malloc(depth * sizeof(int));
-    sequence->match = malloc(depth * sizeof(int));
+    sequence->main = (codon_t*)malloc(depth * sizeof(codon_t));
+    sequence->match = (codon_t*)malloc(depth * sizeof(codon_t));
     sequence->length = depth;
     return;
   }
@@ -148,7 +148,7 @@ void tracepath_s(good_match_t *A, int maxResult, int sequence_length, short T[ma
  * try and merge them?  Looks non-trivial to do.
  */
 
-void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxReports, int *bestStarts[2], int *bestEnds[2], seq_t *bestSeqs, int *bestScores, int *minScore, int minSeparation, int *V, int i, int j, int maxResult, int sequence_length, short T[maxResult][sequence_length], int *mainSeq, int *matchSeq)
+void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxReports, index_t *bestStarts[2], index_t *bestEnds[2], seq_t *bestSeqs, score_t *bestScores, int *minScore, int minSeparation, score_t *V, int i, int j, int maxResult, int sequence_length, score_t T[maxResult][sequence_length], codon_t *mainSeq, codon_t *matchSeq)
 {
   int elements_to_copy;
   int rs[2];
@@ -233,15 +233,15 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
 
   if(*report == sortReports)
   {
-    int index_array[sortReports];
-    int sorted_array[sortReports];
-    int best_index[sortReports];
-    int worst_keeper;
-    int new_best_index=0;
+    index_t index_array[sortReports];
+    score_t sorted_array[sortReports];
+    index_t best_index[sortReports];
+    index_t worst_keeper;
+    index_t new_best_index=0;
 
     sorted_array[0]=0;
 
-    memcpy(sorted_array, bestScores, sizeof(int)*sortReports);
+    memcpy(sorted_array, bestScores, sizeof(score_t)*sortReports);
     index_sort(sorted_array, index_array, *report);
 
     worst_keeper = sortReports - maxReports;
@@ -284,38 +284,38 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
   int sortReports = maxReports * 3;
   int gapFirst = A->simMatrix->gapExtend + A->simMatrix->gapStart;
   // allocating from the heap, because large values of sortReports causes the stack to explode
-  int *working_scores = malloc(sortReports*sizeof(int));
-  int *working_starts[2];
-  int *working_ends[2];
-  seq_t *working_seqs = malloc(sortReports*sizeof(seq_t));
-  working_starts[0] = malloc(sortReports*sizeof(int));
-  working_starts[1] = malloc(sortReports*sizeof(int));
-  working_ends[0] = malloc(sortReports*sizeof(int));
-  working_ends[1] = malloc(sortReports*sizeof(int));
-  memset(working_scores, 0, sortReports*sizeof(int));
-  memset(working_starts[0], 0, sortReports*sizeof(int));
-  memset(working_ends[0], 0, sortReports*sizeof(int));
-  memset(working_starts[1], 0, sortReports*sizeof(int));
-  memset(working_ends[1], 0, sortReports*sizeof(int));
+  score_t *working_scores = (score_t*)malloc(sortReports*sizeof(score_t));
+  index_t *working_starts[2];
+  index_t *working_ends[2];
+  seq_t *working_seqs = (seq_t*)malloc(sortReports*sizeof(seq_t));
+  working_starts[0] = (index_t*)malloc(sortReports*sizeof(index_t));
+  working_starts[1] = (index_t*)malloc(sortReports*sizeof(index_t));
+  working_ends[0] = (index_t*)malloc(sortReports*sizeof(index_t));
+  working_ends[1] = (index_t*)malloc(sortReports*sizeof(index_t));
+  memset(working_scores, 0, sortReports*sizeof(score_t));
+  memset(working_starts[0], 0, sortReports*sizeof(index_t));
+  memset(working_ends[0], 0, sortReports*sizeof(index_t));
+  memset(working_starts[1], 0, sortReports*sizeof(index_t));
+  memset(working_ends[1], 0, sortReports*sizeof(index_t));
   memset(working_seqs, 0, sortReports*sizeof(seq_t));
-  int matchSeq[A->bestSeqs[report_number].length];
-  int *mainSeq = A->seqData->main;
+  codon_t matchSeq[A->bestSeqs[report_number].length];
+  codon_t *mainSeq = A->seqData->main;
 
   // sequence_length is the same as m
-  int sequence_length = A->bestSeqs[report_number].length;
+  index_t sequence_length = A->bestSeqs[report_number].length;
   int maxResult = sequence_length * maxMatch;
-  short T[maxResult][sequence_length];
-  memset(T, 0, maxResult*sequence_length*sizeof(short));
+  score_t T[maxResult][sequence_length];
+  memset(T, 0, maxResult*sequence_length*sizeof(score_t));
 
-  int *V = malloc(sizeof(int)*sequence_length);
-  int *F = malloc(sizeof(int)*sequence_length);
-  int *G = malloc(sizeof(int)*sequence_length);
-  int *E = malloc(sizeof(int)*sequence_length);
-  int *Vg = malloc(sizeof(int)*sequence_length);
+  score_t *V  = (score_t *)malloc(sizeof(score_t)*sequence_length);
+  score_t *F  = (score_t *)malloc(sizeof(score_t)*sequence_length);
+  score_t *G  = (score_t *)malloc(sizeof(score_t)*sequence_length);
+  score_t *E  = (score_t *)malloc(sizeof(score_t)*sequence_length);
+  score_t *Vg = (score_t *)malloc(sizeof(score_t)*sequence_length);
   int adder, iT;
-  int worst;
-  int *sorted_array;// = malloc(sizeof(int)*maxReports);
-  int *index_array;// = malloc(sizeof(int)*maxReports);
+  //int worst;
+  score_t *sorted_array;// = malloc(sizeof(int)*maxReports);
+  index_t *index_array;// = malloc(sizeof(int)*maxReports);
 
   // previous kernels will insert hyphens into sequences to mark where a codon was inserted/deleted.  Clean those hyphens out
   int tidy_length = scrub_hyphens(A, matchSeq, A->bestSeqs[report_number].match, A->bestSeqs[report_number].length);
@@ -392,20 +392,20 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
 
   // once everything is done, add the sequences to the S array.
 
-  index_array = malloc(sizeof(int)*report);
-  sorted_array = malloc(sizeof(int)*report);
+  index_array = (index_t *)malloc(sizeof(index_t)*report);
+  sorted_array = (score_t *)malloc(sizeof(score_t)*report);
 
   if(report!=0)
   {
-    memcpy(sorted_array, working_scores, report * sizeof(int));
+    memcpy(sorted_array, working_scores, report * sizeof(score_t));
     index_sort(sorted_array, index_array, report);
-    worst = (report - maxReports) > 0 ? report - maxReports : 0;
-    S->bestScores = malloc(report * sizeof(int));
-    S->bestStarts[0] = malloc(report * sizeof(int));
-    S->bestStarts[1] = malloc(report * sizeof(int));
-    S->bestEnds[0] = malloc(report * sizeof(int));
-    S->bestEnds[1] = malloc(report * sizeof(int));
-    S->bestSeqs = malloc(report * sizeof(seq_t));
+    //worst = (report - maxReports) > 0 ? report - maxReports : 0;
+    S->bestScores = (score_t*)malloc(report * sizeof(score_t));
+    S->bestStarts[0] = (index_t*)malloc(report * sizeof(index_t));
+    S->bestStarts[1] = (index_t*)malloc(report * sizeof(index_t));
+    S->bestEnds[0] = (index_t*)malloc(report * sizeof(index_t));
+    S->bestEnds[1] = (index_t*)malloc(report * sizeof(index_t));
+    S->bestSeqs = (seq_t*)malloc(report * sizeof(seq_t));
 
     for(int jdx=report-1; jdx >= 0; jdx--)
     {

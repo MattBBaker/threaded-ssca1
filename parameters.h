@@ -1,14 +1,12 @@
 #ifndef _PARAMETERS_H
 #define _PARAMETERS_H
 
-typedef int codon_t;
-
 typedef struct _params
 {
  int ENABLE_PAUSE;
  int ENABLE_VERIF;
  int ENABLE_DEBUG;
-  int CONSTANT_RNG;
+ int CONSTANT_RNG;
 
  double MAIN_SEQ_LENGTH;
  double MATCH_SEQ_LENGTH;

@@ -17,6 +17,7 @@
 #include <locate_similar.h>
 #include <global_align.h>
 #include <multiple_align.h>
+#include <limits.h>
 
 unsigned int random_seed;
 
@@ -142,7 +143,7 @@ int main(int argc, char **argv)
   printf("\nScalable Data Generator - genScalData() beginning execution...\n");
   sim_matrix = gen_sim_matrix(global_parameters.SIM_EXACT, global_parameters.SIM_SIMILAR, global_parameters.SIM_DISSIMILAR, global_parameters.GAP_START, global_parameters.GAP_EXTEND, global_parameters.MATCH_LIMIT);
 
-  seq_data = gen_scal_data(sim_matrix, global_parameters.MAIN_SEQ_LENGTH, global_parameters.MATCH_SEQ_LENGTH);
+  seq_data = gen_scal_data(sim_matrix, global_parameters.MAIN_SEQ_LENGTH, global_parameters.MATCH_SEQ_LENGTH, global_parameters.CONSTANT_RNG);
 
   display_elapsed(&start_time);
 

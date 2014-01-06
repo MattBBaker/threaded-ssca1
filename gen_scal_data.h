@@ -1,4 +1,5 @@
 #include <gen_sim_matrix.h>
+#include <types.h>
 
 #ifndef _GEN_SCAL_DATA
 #define _GEN_SCAL_DATA
@@ -12,14 +13,14 @@
 
 typedef struct _seq_data
 {
-  int *main;
-  int *match;
+  codon_t *main;
+  codon_t *match;
+  index_t mainLen;
+  index_t matchLen;
   int maxValidation;
-  int mainLen;
-  int matchLen;
 } seq_data_t;
 
-seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, int mainLen, int matchLen);
+seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t matchLen, int constant_rng);
 void release_scal_data(seq_data_t *doomed_scal_data);
 void verifyData(sim_matrix_t *simMatrix, seq_data_t *seqData);
 

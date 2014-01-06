@@ -11,12 +11,12 @@
 
 #define REALLOC_INCREMENT 1024
 
-int verifyMultiple(ma_t MA[], int size_ma, int maxDisplay)
+int verifyMultiple(ma_t MA[], index_t size_ma, int maxDisplay)
 {
   int retval=0, t=0;
   int D = size_ma < maxDisplay ? size_ma : maxDisplay;
 
-  printf("\nDisplaying %i of %i sets of global alignments.\n", D, size_ma);
+  printf("\nDisplaying %i of %lu sets of global alignments.\n", D, size_ma);
 
   if(D > 0)
   {
@@ -37,7 +37,7 @@ int verifyMultiple(ma_t MA[], int size_ma, int maxDisplay)
       {
         t += MA[b].scores[idx];
       }
-      printf("\nSet %i; size %i, total score %i, average score %.2f\n",
+      printf("\nSet %i; size %lu, total score %i, average score %.2f\n",
              b, MA[b].length, t, (float)t/(float)MA[b].length);
       for(int i=0; i < MA[b].length; i++)
       {
@@ -103,15 +103,15 @@ void print_seq(seq_t *sequence)
  * Maybe consider trying to merge them?
  */
 
-void tracepath_x(good_match_t *A, int n, int m, short T[n][m], int Yb[m], int Xb[n], int ci, int cj, int dir, seq_t *sequences, int rs[2], int depth)
+void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], codon_t Xb[n], int ci, int cj, int dir, seq_t *sequences, int rs[2], int depth)
 {
   int Ci, Cj, size_data;
 
   if(ci==-1)
   {
     size_data = depth + cj + 1;
-    sequences->main = malloc(sizeof(int)*(size_data));
-    sequences->match = malloc(sizeof(int)*(size_data));
+    sequences->main = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    sequences->match = (codon_t*)malloc(sizeof(codon_t)*(size_data));
     for(int idx=0; idx <= cj; idx++)
     {
       sequences->main[idx] = A->simMatrix->hyphen;
@@ -127,8 +127,8 @@ void tracepath_x(good_match_t *A, int n, int m, short T[n][m], int Yb[m], int Xb
   if(cj==-1)
   {
     size_data = depth + ci + 1;
-    sequences->main = malloc(sizeof(int)*(size_data));
-    sequences->match = malloc(sizeof(int)*(size_data));
+    sequences->main = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    sequences->match = (codon_t*)malloc(sizeof(codon_t)*(size_data));
     for(int idx=0; idx <= ci; idx++)
     {
       sequences->main[idx] = A->simMatrix->bases[Xb[idx]];
@@ -204,28 +204,23 @@ void tracepath_x(good_match_t *A, int n, int m, short T[n][m], int Yb[m], int Xb
 
 int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4], seq_t *first_seq, seq_t *second_seq, seq_t *sequences)
 {
-  int X[first_seq->length];
-  int Xb[(first_seq->length) * 3];
-  int length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
-  int n = length_x * 3;
+  codon_t X[first_seq->length];
+  codon_t Xb[(first_seq->length) * 3];
+  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
+  index_t n = length_x * 3;
 
-  int *Y = second_seq->main;
-  int Yb[(second_seq->length) * 3];
+  codon_t *Y = second_seq->main;
+  codon_t Yb[(second_seq->length) * 3];
 
-  int m = second_seq->length * 3;
+  index_t m = second_seq->length * 3;
 
-  short T[n][m];
+  score_t T[n][m];
 
-  memset(T, 0, sizeof(short)*m*n);
+  memset(T, 0, sizeof(score_t)*m*n);
 
-  short V[m];
-  short Vg[m];
-  short F[m];
-  short E[m+1];
+  score_t V[m], Vg[m], F[m], E[m+1], G[m];
   E[m] = 0;
-  short G[m];
   int rs[2];
-
   int adder;
 
   for(int idx=0; idx < m; idx++)
@@ -315,11 +310,11 @@ int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMa
  *    int       - first index of the lowest value
  */
 
-int lowest_index(int *scan, int size)
+index_t lowest_index(score_t *scan, index_t size)
 {
-  int current_index = 0;
+  index_t current_index = 0;
 
-  for(int idx=1; idx < size; idx++)
+  for(index_t idx=1; idx < size; idx++)
   {
     if(scan[idx] < scan[current_index])
       current_index = idx;
@@ -364,7 +359,7 @@ extern int inverse_identity_matrix[4][4];
  *    int size_m   - [int] size of the array
  */
 
-void release_ma(ma_t *doomed, int size_m)
+void release_ma(ma_t *doomed, index_t size_m)
 {
   for(int idx=0; idx < size_m; idx++)
   {
@@ -440,18 +435,18 @@ void release_ma(ma_t *doomed, int size_m)
 
 //#define DEBUGGER
 
-ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *GA, int misPenalty, int gapPenalty)
+ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga_t *GA, int misPenalty, int gapPenalty)
 {
   int dis_matrix[4][4];
   int codon2bases[3][64];
   int M, center, global_score, i, flag;
   seq_t *C;
   seq_t *alignment;
-  int *realloc_temp;
+  codon_t *realloc_temp;
   //int *sumScores;
   //int *order;
 
-  ma_t *MA = malloc(sizeof(ma_t)*size_s);
+  ma_t *MA = (ma_t*)malloc(sizeof(ma_t)*size_s);
   memset(MA, 0, sizeof(ma_t)*size_s);
 
   //write_out_inputs(A, size_s, S, GA, misPenalty, gapPenalty);
@@ -484,9 +479,9 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
       continue;
     }
 
-    int sumScores[M];
-    int order[M];
-    memset(sumScores, 0, sizeof(int)*M);
+    score_t sumScores[M];
+    index_t order[M];
+    memset(sumScores, 0, sizeof(score_t)*M);
 
     // sum over all sequence matches
     for(int idx=0; idx < GA[g].length; idx++)
@@ -496,22 +491,22 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
     // find the minimum
     center = lowest_index(sumScores, M);
 
-    MA[g].scores = malloc(M*sizeof(int));
-    MA[g].alignment = malloc(M*sizeof(seq_t));
+    MA[g].scores = (score_t*)malloc(M*sizeof(score_t));
+    MA[g].alignment = (seq_t*)malloc(M*sizeof(seq_t));
     MA[g].length = M;
-    memset(MA[g].scores, 0, M*sizeof(int));
+    memset(MA[g].scores, 0, M*sizeof(score_t));
     memset(MA[g].alignment, 0, M*sizeof(seq_t));
 
     // make a copy of the scores
     for(int idx=0; idx < M; idx++) MA[g].scores[idx] = GA[g].globalScores[center][idx];
     index_sort(MA[g].scores, order, M);
-    C = malloc(sizeof(seq_t));
-    C->main = malloc(sizeof(int)*S[g]->bestSeqs[center].length);
+    C = (seq_t*)malloc(sizeof(seq_t));
+    C->main = (codon_t*)malloc(sizeof(codon_t)*S[g]->bestSeqs[center].length);
     C->match = NULL;
     C->length = scrub_hyphens(A, C->main, S[g]->bestSeqs[center].main, S[g]->bestSeqs[center].length);
 
     // Decode the codon sequence
-    MA[g].alignment[0].main = malloc(sizeof(int) * C->length * 3);
+    MA[g].alignment[0].main = (codon_t*)malloc(sizeof(codon_t) * C->length * 3);
     for(int idx=0; idx < C->length; idx++)
     {
       MA[g].alignment[0].main[idx*3] = A->simMatrix->codon[C->main[idx]][0];
@@ -524,7 +519,7 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
     // Align each other sequence with the center sequence.
     for(int x=1; x < M; x++)
     {
-      alignment = malloc(sizeof(seq_t));
+      alignment = (seq_t*)malloc(sizeof(seq_t));
       global_score = alignPair(A, codon2bases, gapPenalty, dis_matrix, &(S[g]->bestSeqs[order[x]]), C, alignment);
       alignment->backing_memory = alignment->length;
 
@@ -576,7 +571,7 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
         {
           if(alignment->backing_memory == alignment->length)
           {
-            realloc_temp = realloc(alignment->main, sizeof(int) * (alignment->backing_memory + REALLOC_INCREMENT));
+            realloc_temp = (codon_t*)realloc(alignment->main, sizeof(codon_t) * (alignment->backing_memory + REALLOC_INCREMENT));
             if(realloc_temp == NULL)
             {
               printf("Realloc error\n");
@@ -584,7 +579,7 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
             }
             alignment->main = realloc_temp;
 
-            realloc_temp = realloc(alignment->match, sizeof(int) * (alignment->backing_memory + REALLOC_INCREMENT));
+            realloc_temp = (codon_t*)realloc(alignment->match, sizeof(codon_t) * (alignment->backing_memory + REALLOC_INCREMENT));
             if(realloc_temp == NULL)
             {
               printf("Realloc error\n");
@@ -611,7 +606,7 @@ ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[size_s], ga_t *
           {
             if(MA[g].alignment[j].backing_memory == MA[g].alignment[j].length)
             {
-              realloc_temp = realloc(MA[g].alignment[j].main, sizeof(int) * (MA[g].alignment[j].backing_memory + REALLOC_INCREMENT));
+              realloc_temp = (codon_t*)realloc(MA[g].alignment[j].main, sizeof(codon_t) * (MA[g].alignment[j].backing_memory + REALLOC_INCREMENT));
               if(realloc_temp == NULL)
               {
                 printf("Realloc error\n");

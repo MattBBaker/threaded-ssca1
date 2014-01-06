@@ -17,7 +17,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   }
   else
   {
-    printf("\nFound %i acceptable alignments with scores from %i to %i.\n",
+    printf("\nFound %lu acceptable alignments with scores from %hhu to %hhu.\n",
            A->bestLength, A->bestScores[0], A->bestScores[A->bestLength-1]);
     if(maxDisplay > 0)
     {
@@ -56,7 +56,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
       assemble_codon_chain(A, main_codon_chain, A->bestSeqs[m].main, A->bestSeqs[m].length);
       assemble_codon_chain(A, match_codon_chain, A->bestSeqs[m].match, A->bestSeqs[m].length);
 
-      printf("%7d  %s  %s  %7d\n%7d  %s  %s  %7d\n", 
+      printf("%7ld  %s  %s  %7ld\n%7ld  %s  %s  %7ld\n", 
              A->bestStarts[0][m], main_acid_chain, main_codon_chain, A->bestEnds[0][m],
              A->bestStarts[1][m], match_acid_chain, match_codon_chain, A->bestEnds[1][m]);
     }
@@ -87,8 +87,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
  */
 
   /* Matlab allows for a = [1 2] and b = [0 a] and b will be [0 1 2].  Obviously we can't have that in C. */
-  void tracepath(good_match_t *A, int sizeT, int *T, int ei, int ej, int i, int j, int dir, int rs[2], seq_t *sequence, int depth)
-{
+  void tracepath(good_match_t *A, int sizeT, int *T, int ei, int ej, int i, int j, int dir, int rs[2], seq_t *sequence, int depth) {
   int Ci;
   int Cj;
 
@@ -105,8 +104,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   {
     rs[0] = i + 1;
     rs[1] = j + 1;
-    sequence->main = malloc(sizeof(int)*depth);
-    sequence->match = malloc(sizeof(int)*depth);
+    sequence->main = (codon_t*)malloc(sizeof(codon_t)*depth);
+    sequence->match = (codon_t*)malloc(sizeof(codon_t)*depth);
     sequence->length = depth;
     return;
   }
@@ -188,20 +187,15 @@ int verify_alignment(good_match_t *A, int maxDisplay)
  * since its start-point pair A/A matches the better ABCDEF/ABCDEF match.)
  */
 
-void doScan(good_match_t *A, int *bestR, int minSeparation, int report)
-{
+void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   int goal = A->goodScores[report];
   int ei = A->goodEnds[0][report];
   int ej = A->goodEnds[1][report];
 
-  int *mainSeq = A->seqData->main;
-  int *matchSeq = A->seqData->match;
-  //int gapFirst = A->simMatrix->gapStart;
+  codon_t *mainSeq = A->seqData->main;
+  codon_t *matchSeq = A->seqData->match;
   int gapExtend = A->simMatrix->gapExtend;
   int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;        // total penalty for first codon in gap
-  //int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;
-  //int gapExtend = gapFirst;
-
 
   int m = ei > ej ? ei : ej;
   int *V[2];
@@ -396,18 +390,18 @@ void scanBackward(good_match_t *A, int maxReports, int minSeparation)
 {
   // Preallocate working storage, thinking of cleaning up large chunks of this.
 
-  A->bestStarts[0] = malloc(maxReports*sizeof(int)*2);
-  A->bestStarts[1] = malloc(maxReports*sizeof(int)*2);
-  A->bestEnds[0] = malloc(maxReports*sizeof(int)*2);
-  A->bestEnds[1] = malloc(maxReports*sizeof(int)*2);
-  A->bestScores = malloc(maxReports*sizeof(int)*2);
-  A->bestSeqs = malloc(maxReports * sizeof(seq_t)*2);
+  A->bestStarts[0] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
+  A->bestStarts[1] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
+  A->bestEnds[0] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
+  A->bestEnds[1] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
+  A->bestScores = (score_t *)malloc(maxReports*sizeof(score_t)*2);
+  A->bestSeqs = (seq_t *)malloc(maxReports * sizeof(seq_t)*2);
 
-  memset(A->bestStarts[0], '\0', sizeof(int) * maxReports);
-  memset(A->bestStarts[1], '\0', sizeof(int) * maxReports);
-  memset(A->bestEnds[0], '\0', sizeof(int) * maxReports);
-  memset(A->bestEnds[1], '\0', sizeof(int) * maxReports);
-  memset(A->bestScores, '\0', sizeof(int) * maxReports);
+  memset(A->bestStarts[0], '\0', sizeof(index_t) * maxReports);
+  memset(A->bestStarts[1], '\0', sizeof(index_t) * maxReports);
+  memset(A->bestEnds[0], '\0', sizeof(index_t) * maxReports);
+  memset(A->bestEnds[1], '\0', sizeof(index_t) * maxReports);
+  memset(A->bestScores, '\0', sizeof(score_t) * maxReports);
   memset(A->bestSeqs, '\0', sizeof(seq_t) * maxReports);
 
   int bestR = 0;

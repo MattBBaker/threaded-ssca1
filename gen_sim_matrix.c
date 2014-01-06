@@ -67,7 +67,7 @@ sim_matrix_t *gen_sim_matrix(int exact, int similar, int dissimilar, int gapStar
 {
   char process_acid;
   int ccode = 0;
-  sim_matrix_t *the_similarity_matrix = malloc(sizeof(sim_matrix_t));
+  sim_matrix_t *the_similarity_matrix = (sim_matrix_t*)malloc(sizeof(sim_matrix_t));
   the_similarity_matrix->star = STAR;
   the_similarity_matrix->hyphen = HYPHEN;
   //strcpy(the_similarity_matrix->codon[64], {(char)HYPHEN,(char)HYPHEN,(char)HYPHEN});

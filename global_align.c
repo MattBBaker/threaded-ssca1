@@ -6,7 +6,7 @@
 
 int inverse_identity_matrix[4][4] = {{0,1,1,1},{1,0,1,1},{1,1,0,1},{1,1,1,0}};
 
-void print_square(short **square, int length)
+void print_square(score_t **square, int length)
 {
   for(int idx=0; idx < length; idx++)
   {
@@ -18,12 +18,12 @@ void print_square(short **square, int length)
   }
 }
 
-int verifyGlobal(ga_t G[], int size_g, int misPenalty, int gapPenalty, int maxDisplay)
+int verifyGlobal(ga_t G[], index_t size_g, int misPenalty, int gapPenalty, int maxDisplay)
 {
   int retval=0;
   int D = size_g < maxDisplay ? size_g : maxDisplay;
 
-  printf("\nDisplaying %i of %i sets of global alignment pair scores.\n\n", D, size_g);
+  printf("\nDisplaying %i of %lu sets of global alignment pair scores.\n\n", D, size_g);
   printf("       Penalty for mismatching bases: %i\n", misPenalty);
   printf("     Penalty for each space in a gap: %i\n", gapPenalty);
 
@@ -58,20 +58,20 @@ int verifyGlobal(ga_t G[], int size_g, int misPenalty, int gapPenalty, int maxDi
 
 short scorePair(good_match_t *A, seq_t *first_seq, seq_t *second_seq, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4])
 {
-  int X[first_seq->length];
-  int Xb[(first_seq->length) * 3];
-  int length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
-  int n = length_x * 3;
+  codon_t X[first_seq->length];
+  codon_t Xb[(first_seq->length) * 3];
+  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
+  index_t n = length_x * 3;
 
-  int Y[second_seq->length];
-  int Yb[(second_seq->length) * 3];
-  int length_y = scrub_hyphens(A, Y, second_seq->main, second_seq->length );
-  int m = length_y * 3;
+  codon_t Y[second_seq->length];
+  codon_t Yb[(second_seq->length) * 3];
+  index_t length_y = scrub_hyphens(A, Y, second_seq->main, second_seq->length );
+  index_t m = length_y * 3;
 
   int adder;
 
-  short V[m];
-  short G[m];
+  score_t V[m];
+  score_t G[m];
 
   for(int idx=0; idx < m; idx++)
   {
@@ -120,11 +120,11 @@ short scorePair(good_match_t *A, seq_t *first_seq, seq_t *second_seq, int codon2
  *    int size     - [int] size of the ga_t array
  */
 
-void release_ga(ga_t *doomed, int size)
+void release_ga(ga_t *doomed, index_t size)
 {
-  for(int idx=0; idx < size; idx++)
+  for(index_t idx=0; idx < size; idx++)
   {
-    for(int jdx=0; jdx < doomed[idx].length; jdx++)
+    for(index_t jdx=0; jdx < doomed[idx].length; jdx++)
     {
       free(doomed[idx].globalScores[jdx]);
     }
@@ -186,12 +186,12 @@ void release_ga(ga_t *doomed, int size)
  *
  */
 
-ga_t *globalAlign(good_match_t *A, int size_s, good_match_t *S[size_s], int misPenalty, int gapPenalty)
+ga_t *globalAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], int misPenalty, int gapPenalty)
 {
   int dis_matrix[4][4];
   int codon2bases[3][64];
   int M;
-  ga_t *GA = malloc(sizeof(ga_t) * size_s);
+  ga_t *GA = (ga_t*)malloc(sizeof(ga_t) * size_s);
   memset(GA, 0, sizeof(ga_t *) * size_s);
   for(int idx=0; idx<4; idx++)
     for(int jdx=0; jdx<4; jdx++) 
@@ -218,11 +218,11 @@ ga_t *globalAlign(good_match_t *A, int size_s, good_match_t *S[size_s], int misP
 
     GA[idx].length=M;
 
-    GA[idx].globalScores = malloc(sizeof(short *) * M);
+    GA[idx].globalScores = (score_t**)malloc(sizeof(score_t *) * M);
     for(int jdx=0; jdx < M; jdx++)
     {
-      GA[idx].globalScores[jdx] = malloc(sizeof(short) * M);
-      memset(GA[idx].globalScores[jdx], 0, M * sizeof(short));
+      GA[idx].globalScores[jdx] = (score_t *)malloc(sizeof(score_t) * M);
+      memset(GA[idx].globalScores[jdx], 0, M * sizeof(score_t));
     }
     for(int x=0; x < M; x++)
     {

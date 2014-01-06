@@ -3,16 +3,17 @@
 
 #include <pairwise_align.h>
 #include <global_align.h>
+#include <types.h>
 
 typedef struct _ma_t
 {
-  int *scores;
+  score_t *scores;
   seq_t *alignment;
-  int length;
+  index_t length;
 } ma_t;
 
-ma_t *multipleAlign(good_match_t *A, int size_s, good_match_t *S[], ga_t *GA, int misPenalty, int gapPenalty);
-void release_ma(ma_t *doomed, int length);
-int verifyMultiple(ma_t MA[], int size_ma, int maxDisplay);
+ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[], ga_t *GA, int misPenalty, int gapPenalty);
+void release_ma(ma_t *doomed, index_t length);
+int verifyMultiple(ma_t MA[], index_t size_ma, int maxDisplay);
 
 #endif

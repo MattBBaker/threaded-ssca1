@@ -1,12 +1,14 @@
 #ifndef _SIM_MATRIX_H
 #define _SIM_MATRIX_H
 
+#include <types.h>
+
 #define STAR ((int)48)
 #define HYPHEN ((int)64)
 
 typedef struct _sim_matrix_t
 {
-  int similarity[64][64]; /* - [2D array int] 1-based codon/codon similarity table */
+  score_t similarity[64][64]; /* - [2D array int] 1-based codon/codon similarity table */
   char aminoAcid[65];     /* - [1D char vector] 1-based codon to aminoAcid table */
   char bases[5];          /* - [1D char vector] 1-based encoding to base letter table */
   char codon[65][4];      /* - [64 x 3 char array] 1-based codon to base letters table */
