@@ -50,7 +50,7 @@ int verifyMultiple(ma_t MA[], index_t size_ma, int maxDisplay)
             print_buffer[idx] = MA[b].alignment[i].main[idx];
         }
         print_buffer[MA[b].alignment[i].length] = '\0';
-        printf("  %4i  %s\n", MA[b].scores[i], print_buffer);
+        printf("  %4i  %s\n", (int)MA[b].scores[i], print_buffer);
       }
     }
   }
@@ -525,7 +525,7 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
 
       if(global_score!=MA[g].scores[x]) // debug statement
         printf("Waring!  Newly computed score does not agree with previous score! global_score=%i MA[%i].scores[%i]=%i\n", 
-               global_score, g, x, MA[g].scores[x]);
+               (int)global_score, g, x, (int)MA[g].scores[x]);
 
       // add spaces to make the centers match
       i=0;

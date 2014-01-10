@@ -30,12 +30,12 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
       {
         retval = 1;
         printf("\nverifySimilar %i/%i failed; reported %i vs actual %i:   ---------------------------\n",
-               b, m, S[b]->bestScores[m], score);
+               b, m, (int)S[b]->bestScores[m], (int)score);
       }
       else if(display_count > b)
       {
         printf("\nverifySimilar %i/%i, succeeded; score %i:\n",
-               b, m, S[b]->bestScores[m]);
+               b, m, (int)S[b]->bestScores[m]);
       }
       if(display_count > b)
       {

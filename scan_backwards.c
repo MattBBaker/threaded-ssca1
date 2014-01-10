@@ -17,8 +17,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   }
   else
   {
-    printf("\nFound %lu acceptable alignments with scores from %hhu to %hhu.\n",
-           A->bestLength, A->bestScores[0], A->bestScores[A->bestLength-1]);
+    printf("\nFound %lu acceptable alignments with scores from %i to %i.\n",
+           A->bestLength, (int)A->bestScores[0], (int)A->bestScores[A->bestLength-1]);
     if(maxDisplay > 0)
     {
       printf("\nStarting   Amino     Codon           Ending");
@@ -32,11 +32,11 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     {
       retval = 1;
       printf("\nverifyAlignment %i failed; Kernel 1 reported %i versus Kernel 2 reported %i:\n---------------------------\n",
-             m, A->bestScores[m], score);
+             m, (int)A->bestScores[m], (int)score);
     }
     else if(m < maxDisplay)
     {
-      printf("\nverifyAlignment %i, succeeded; score %i:\n", m, A->bestScores[m]);
+      printf("\nverifyAlignment %i, succeeded; score %i:\n", m, (int)A->bestScores[m]);
     }
     if(m < maxDisplay)
     {

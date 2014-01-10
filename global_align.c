@@ -12,7 +12,7 @@ void print_square(score_t **square, int length)
   {
     for(int jdx=0; jdx < length; jdx++)
     {
-      printf("%2i ", square[idx][jdx]);
+      printf("%2i ", (int)square[idx][jdx]);
     }
     printf("\n");
   }
