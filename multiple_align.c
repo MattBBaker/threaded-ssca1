@@ -41,15 +41,15 @@ int verifyMultiple(ma_t MA[], index_t size_ma, int maxDisplay)
              b, MA[b].length, t, (float)t/(float)MA[b].length);
       for(int i=0; i < MA[b].length; i++)
       {
-        char print_buffer[MA[b].alignment[i].length+1];
-        for(int idx=0; idx < MA[b].alignment[i].length; idx++)
+        char print_buffer[MA[b].alignment[i].main->length+1];
+        for(int idx=0; idx < MA[b].alignment[i].main->length; idx++)
         {
-          if(MA[b].alignment[i].main[idx] == HYPHEN)
+          if(MA[b].alignment[i].main->sequence[idx] == HYPHEN)
             print_buffer[idx] = '-';
           else
-            print_buffer[idx] = MA[b].alignment[i].main[idx];
+            print_buffer[idx] = MA[b].alignment[i].main->sequence[idx];
         }
-        print_buffer[MA[b].alignment[i].length] = '\0';
+        print_buffer[MA[b].alignment[i].main->length] = '\0';
         printf("  %4i  %s\n", (int)MA[b].scores[i], print_buffer);
       }
     }
@@ -58,39 +58,32 @@ int verifyMultiple(ma_t MA[], index_t size_ma, int maxDisplay)
   return retval;
 }
 
-void print_seq(seq_t *sequence)
-{
-  char *main_buffer=malloc(sequence->length+1);
-  char *match_buffer=malloc(sequence->length+1);
-  main_buffer[0] = '\0';
-  match_buffer[0] = '\0';
+void print_seq(seq_t *sequence){
 
-  if(sequence->main != NULL)
+  char *main_buffer=malloc(sequence->length+1);
+  main_buffer[0] = '\0';
+
+  if(sequence != NULL)
   {
     for(int idx=0; idx < sequence->length; idx++)
     {
-      if(sequence->main[idx] == HYPHEN)
+      if(sequence->sequence[idx] == HYPHEN)
         main_buffer[idx] = '-';
       else
-        main_buffer[idx] = sequence->main[idx];
+        main_buffer[idx] = sequence->sequence[idx];
     }
     main_buffer[sequence->length] = '\0';
   }
 
-  if(sequence->match != NULL)
-  {
-    for(int idx=0; idx < sequence->length; idx++)
-    {
-      if(sequence->match[idx] == HYPHEN)
-        match_buffer[idx] = '-';
-      else
-        match_buffer[idx] = sequence->match[idx];
-    }
-    main_buffer[sequence->length] = '\0';
-  }
+  printf("buffer: %s;\n", main_buffer);
+  free(main_buffer);
+}
 
-
-  printf(" main: %s;\nmatch: %s;\n", main_buffer, match_buffer);
+void print_seq_data(seq_data_t *sequence) {
+  printf("  main ");
+  print_seq(sequence->main);
+  printf("  match ");
+  print_seq(sequence->match);
 }
 
 /*
@@ -103,41 +96,43 @@ void print_seq(seq_t *sequence)
  * Maybe consider trying to merge them?
  */
 
-void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], codon_t Xb[n], int ci, int cj, int dir, seq_t *sequences, int rs[2], int depth)
+void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], codon_t Xb[n], int ci, int cj, int dir, seq_data_t *sequences, int rs[2], int depth)
 {
   int Ci, Cj, size_data;
 
   if(ci==-1)
   {
     size_data = depth + cj + 1;
-    sequences->main = (codon_t*)malloc(sizeof(codon_t)*(size_data));
-    sequences->match = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    sequences->main = alloc_seq(size_data);
+    sequences->match = alloc_seq(size_data);
     for(int idx=0; idx <= cj; idx++)
     {
-      sequences->main[idx] = A->simMatrix->hyphen;
-      sequences->match[idx] = A->simMatrix->bases[Yb[idx]];
+      sequences->main->sequence[idx] = A->simMatrix->hyphen;
+      sequences->match->sequence[idx] = A->simMatrix->bases[Yb[idx]];
     }
     rs[0] = 0;
     rs[1] = 0;
-    sequences->length = size_data;
-    sequences->backing_memory = size_data;
+    //sequences->length = size_data;
+    //sequences->backing_memory = size_data;
     return;
   }
 
   if(cj==-1)
   {
     size_data = depth + ci + 1;
-    sequences->main = (codon_t*)malloc(sizeof(codon_t)*(size_data));
-    sequences->match = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    //sequences->main = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    //sequences->match = (codon_t*)malloc(sizeof(codon_t)*(size_data));
+    sequences->main = alloc_seq(size_data);
+    sequences->match = alloc_seq(size_data);
     for(int idx=0; idx <= ci; idx++)
     {
-      sequences->main[idx] = A->simMatrix->bases[Xb[idx]];
-      sequences->match[idx] = A->simMatrix->hyphen;
+      sequences->main->sequence[idx] = A->simMatrix->bases[Xb[idx]];
+      sequences->match->sequence[idx] = A->simMatrix->hyphen;
     }
     rs[0] = 0;
     rs[1] = 0;
-    sequences->length = size_data;
-    sequences->backing_memory = size_data;
+    //sequences->length = size_data;
+    //sequences->backing_memory = size_data;
     return;
   }
 
@@ -148,8 +143,10 @@ void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], 
   {
     rs[0] = -1;
     rs[1] = -1;
-    sequences->length = 0;
-    sequences->backing_memory = 0;
+    sequences->main = alloc_seq(0);
+    sequences->match = alloc_seq(0);
+    //sequences->length = 0;
+    //sequences->backing_memory = 0;
     return;
   }
 
@@ -161,8 +158,8 @@ void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], 
     tracepath_x(A, n, m, T, Yb, Xb, ci-1, cj-1, 0, sequences, rs, depth+1);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequences->main[sequences->length-depth-1] = Ci;
-      sequences->match[sequences->length-depth-1] = Cj;
+      sequences->main->sequence[sequences->main->length-depth-1] = Ci;
+      sequences->match->sequence[sequences->match->length-depth-1] = Cj;
       return;
     }
   }
@@ -171,8 +168,8 @@ void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], 
     tracepath_x(A, n, m, T, Yb, Xb, ci-1, cj, 2, sequences, rs, depth+1);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequences->main[sequences->length-depth-1] = Ci;
-      sequences->match[sequences->length-depth-1] = A->simMatrix->hyphen;
+      sequences->main->sequence[sequences->main->length-depth-1] = Ci;
+      sequences->match->sequence[sequences->match->length-depth-1] = A->simMatrix->hyphen;
       return;
     }
   }
@@ -181,8 +178,8 @@ void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], 
     tracepath_x(A, n, m, T, Yb, Xb, ci, cj-1, 1, sequences, rs, depth+1);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequences->main[sequences->length-depth-1] = A->simMatrix->hyphen;
-      sequences->match[sequences->length-depth-1] = Cj;
+      sequences->main->sequence[sequences->main->length-depth-1] = A->simMatrix->hyphen;
+      sequences->match->sequence[sequences->match->length-depth-1] = Cj;
       return;
     }
   }
@@ -202,17 +199,18 @@ void tracepath_x(good_match_t *A, int n, int m, score_t T[n][m], codon_t Yb[m], 
  *     seq_t *sequences - main has X aligned against Y and match has Y aligned against X
  */
 
-int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4], seq_t *first_seq, seq_t *second_seq, seq_t *sequences)
+int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4], seq_data_t *first_seq, seq_data_t *second_seq, seq_data_t *sequences)
 {
-  codon_t X[first_seq->length];
-  codon_t Xb[(first_seq->length) * 3];
-  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
+  //codon_t X[first_seq->main->length];
+  seq_t *X = alloc_seq(first_seq->main->length);
+  codon_t Xb[(first_seq->main->length) * 3];
+  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->main->length );
   index_t n = length_x * 3;
 
-  codon_t *Y = second_seq->main;
-  codon_t Yb[(second_seq->length) * 3];
+  seq_t *Y = second_seq->main;
+  codon_t Yb[(second_seq->main->length) * 3];
 
-  index_t m = second_seq->length * 3;
+  index_t m = second_seq->main->length * 3;
 
   score_t T[n][m];
 
@@ -231,16 +229,16 @@ int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMa
 
   for(int idx=0; idx < length_x; idx++)
   {
-    Xb[idx*3] = codon2bases[0][X[idx]];
-    Xb[idx*3+1] = codon2bases[1][X[idx]];
-    Xb[idx*3+2] = codon2bases[2][X[idx]];
+    Xb[idx*3] = codon2bases[0][X->sequence[idx]];
+    Xb[idx*3+1] = codon2bases[1][X->sequence[idx]];
+    Xb[idx*3+2] = codon2bases[2][X->sequence[idx]];
   }
 
-  for(int idx=0; idx < second_seq->length; idx++)
+  for(int idx=0; idx < second_seq->main->length; idx++)
   {
-    Yb[idx*3] = codon2bases[0][Y[idx]];
-    Yb[idx*3+1] = codon2bases[1][Y[idx]];
-    Yb[idx*3+2] = codon2bases[2][Y[idx]];
+    Yb[idx*3] = codon2bases[0][Y->sequence[idx]];
+    Yb[idx*3+1] = codon2bases[1][Y->sequence[idx]];
+    Yb[idx*3+2] = codon2bases[2][Y->sequence[idx]];
   }
 
   for(int idx=0; idx < n; idx++)
@@ -298,6 +296,8 @@ int alignPair(good_match_t *A, int codon2bases[3][64], int gapPenalty, int disMa
 
   int ret_val = (int)V[m-1];
 
+  free_seq(X);
+
   return ret_val;
 }
 
@@ -341,7 +341,7 @@ int is_aligned(seq_t *source, seq_t *dest)
   if(source->length != dest->length) return 0;
   for(int idx=0; idx < source->length; idx++)
   {
-    if(source->main[idx] != dest->match[idx])
+    if(source->sequence[idx] != dest->sequence[idx])
     {
       return 0;
     }
@@ -365,7 +365,8 @@ void release_ma(ma_t *doomed, index_t size_m)
   {
     for(int jdx=0; jdx < doomed[idx].length; jdx++)
     {
-      free(doomed[idx].alignment[jdx].main);
+      //free(doomed[idx].alignment[jdx].main);
+      free_seq(doomed[idx].alignment[jdx].main);
     }
     free(doomed[idx].alignment);
     free(doomed[idx].scores);
@@ -440,9 +441,9 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
   int dis_matrix[4][4];
   int codon2bases[3][64];
   int M, center, global_score, i, flag;
-  seq_t *C;
-  seq_t *alignment;
-  codon_t *realloc_temp;
+  seq_data_t *C;
+  seq_data_t *alignment;
+
   //int *sumScores;
   //int *order;
 
@@ -492,36 +493,38 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
     center = lowest_index(sumScores, M);
 
     MA[g].scores = (score_t*)malloc(M*sizeof(score_t));
-    MA[g].alignment = (seq_t*)malloc(M*sizeof(seq_t));
+    MA[g].alignment = (seq_data_t*)malloc(M*sizeof(seq_data_t));
     MA[g].length = M;
     memset(MA[g].scores, 0, M*sizeof(score_t));
-    memset(MA[g].alignment, 0, M*sizeof(seq_t));
+    memset(MA[g].alignment, 0, M*sizeof(seq_data_t));
 
     // make a copy of the scores
     for(int idx=0; idx < M; idx++) MA[g].scores[idx] = GA[g].globalScores[center][idx];
     index_sort(MA[g].scores, order, M);
-    C = (seq_t*)malloc(sizeof(seq_t));
-    C->main = (codon_t*)malloc(sizeof(codon_t)*S[g]->bestSeqs[center].length);
+    C = (seq_data_t*)malloc(sizeof(seq_data_t));
+    //C->main = (codon_t*)malloc(sizeof(codon_t)*S[g]->bestSeqs[center].length);
+    C->main = alloc_seq(sizeof(codon_t)*S[g]->bestSeqs[center].main->length);
     C->match = NULL;
-    C->length = scrub_hyphens(A, C->main, S[g]->bestSeqs[center].main, S[g]->bestSeqs[center].length);
+    scrub_hyphens(A, C->main, S[g]->bestSeqs[center].main, S[g]->bestSeqs[center].main->length);
 
     // Decode the codon sequence
-    MA[g].alignment[0].main = (codon_t*)malloc(sizeof(codon_t) * C->length * 3);
-    for(int idx=0; idx < C->length; idx++)
+    //MA[g].alignment[0].main = (codon_t*)malloc(sizeof(codon_t) * C->length * 3);
+    MA[g].alignment[0].main = alloc_seq(sizeof(codon_t) * C->main->length * 3);
+    for(int idx=0; idx < C->main->length; idx++)
     {
-      MA[g].alignment[0].main[idx*3] = A->simMatrix->codon[C->main[idx]][0];
-      MA[g].alignment[0].main[idx*3+1] = A->simMatrix->codon[C->main[idx]][1];
-      MA[g].alignment[0].main[idx*3+2] = A->simMatrix->codon[C->main[idx]][2];
+      MA[g].alignment[0].main->sequence[idx*3] = A->simMatrix->codon[C->main->sequence[idx]][0];
+      MA[g].alignment[0].main->sequence[idx*3+1] = A->simMatrix->codon[C->main->sequence[idx]][1];
+      MA[g].alignment[0].main->sequence[idx*3+2] = A->simMatrix->codon[C->main->sequence[idx]][2];
     }
-    MA[g].alignment[0].length = C->length * 3;
-    MA[g].alignment[0].backing_memory = C->length * 3;
+    MA[g].alignment[0].main->length = C->main->length * 3;
+    MA[g].alignment[0].main->backing_memory = C->main->length * 3;
 
     // Align each other sequence with the center sequence.
     for(int x=1; x < M; x++)
     {
-      alignment = (seq_t*)malloc(sizeof(seq_t));
+      alignment = (seq_data_t*)malloc(sizeof(seq_data_t));
       global_score = alignPair(A, codon2bases, gapPenalty, dis_matrix, &(S[g]->bestSeqs[order[x]]), C, alignment);
-      alignment->backing_memory = alignment->length;
+      alignment->main->backing_memory = alignment->main->length;
 
       if(global_score!=MA[g].scores[x]) // debug statement
         printf("Waring!  Newly computed score does not agree with previous score! global_score=%i MA[%i].scores[%i]=%i\n", 
@@ -532,18 +535,18 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
 #ifdef DEBUGGER
       printf("Entering is_aligned loop\n");
 #endif
-      while(!is_aligned(&(MA[g].alignment[0]), alignment))
+      while(!is_aligned(MA[g].alignment[0].main, alignment->match))
       {
         //skip = 0;
-        if(i >= alignment->length) // extend cAligned
+        if(i >= alignment->match->length) // extend cAligned
         {
           flag = 1;
         }
-        else if(i >= MA[g].alignment[0].length) // extend alignment table
+        else if(i >= MA[g].alignment[0].main->length) // extend alignment table
         {
           flag = 0;
         }
-        else if(alignment->match[i] == MA[g].alignment[0].main[i]) // this one matches
+        else if(alignment->match->sequence[i] == MA[g].alignment[0].main->sequence[i]) // this one matches
         {
           i++;
           continue;
@@ -551,7 +554,7 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
         }
         else  // extend the one that is not a gap
         {
-          flag = (MA[g].alignment[0].main[i] == A->simMatrix->hyphen || MA[g].alignment[0].main[i] == 45);
+          flag = (MA[g].alignment[0].main->sequence[i] == A->simMatrix->hyphen || MA[g].alignment[0].main->sequence[i] == 45);
         }
 
 
@@ -569,60 +572,40 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
 
         if(flag)
         {
-          if(alignment->backing_memory == alignment->length)
+          if(alignment->match->backing_memory == alignment->match->length)
           {
-            realloc_temp = (codon_t*)realloc(alignment->main, sizeof(codon_t) * (alignment->backing_memory + REALLOC_INCREMENT));
-            if(realloc_temp == NULL)
-            {
-              printf("Realloc error\n");
-              abort();
-            }
-            alignment->main = realloc_temp;
-
-            realloc_temp = (codon_t*)realloc(alignment->match, sizeof(codon_t) * (alignment->backing_memory + REALLOC_INCREMENT));
-            if(realloc_temp == NULL)
-            {
-              printf("Realloc error\n");
-              abort();
-            }
-            alignment->match = realloc_temp;
-            alignment->backing_memory = alignment->backing_memory + REALLOC_INCREMENT;
+            extend_seq(alignment->main, REALLOC_INCREMENT);
+            extend_seq(alignment->match, REALLOC_INCREMENT);
           }
 
-          for(int idx=alignment->length; idx > i; idx--)
+          for(int idx=alignment->match->length; idx > i; idx--)
           {
-            alignment->main[idx] = alignment->main[idx-1];
-            alignment->match[idx] = alignment->match[idx-1];
+            alignment->main->sequence[idx] = alignment->main->sequence[idx-1];
+            alignment->match->sequence[idx] = alignment->match->sequence[idx-1];
           }
 
-          alignment->main[i] = A->simMatrix->hyphen;
-          alignment->match[i] = A->simMatrix->hyphen;
+          alignment->main->sequence[i] = A->simMatrix->hyphen;
+          alignment->match->sequence[i] = A->simMatrix->hyphen;
 
-          alignment->length++;
+          alignment->main->length++;
+          alignment->match->length++;
         }
         else
         {
           for(int j=0; j < x; j++)
           {
-            if(MA[g].alignment[j].backing_memory == MA[g].alignment[j].length)
+            if(MA[g].alignment[j].main->backing_memory == MA[g].alignment[j].main->length)
             {
-              realloc_temp = (codon_t*)realloc(MA[g].alignment[j].main, sizeof(codon_t) * (MA[g].alignment[j].backing_memory + REALLOC_INCREMENT));
-              if(realloc_temp == NULL)
-              {
-                printf("Realloc error\n");
-                abort();
-              }
-              MA[g].alignment[j].main = realloc_temp;
-              MA[g].alignment[j].backing_memory += REALLOC_INCREMENT;
+              extend_seq(MA[g].alignment[j].main, REALLOC_INCREMENT);
             }
 
-            for(int idx=MA[g].alignment[j].length; idx > i; idx--)
+            for(int idx=MA[g].alignment[j].main->length; idx > i; idx--)
             {
-              MA[g].alignment[j].main[idx] = MA[g].alignment[j].main[idx-1];
+              MA[g].alignment[j].main->sequence[idx] = MA[g].alignment[j].main->sequence[idx-1];
             }
 
-            MA[g].alignment[j].main[i] = A->simMatrix->hyphen;
-            MA[g].alignment[j].length++;
+            MA[g].alignment[j].main->sequence[i] = A->simMatrix->hyphen;
+            MA[g].alignment[j].main->length++;
           }
         }
         //}
@@ -634,12 +617,12 @@ ma_t *multipleAlign(good_match_t *A, index_t size_s, good_match_t *S[size_s], ga
 #endif
       MA[g].alignment[x].main = alignment->main;
       MA[g].alignment[x].match = NULL;
-      free(alignment->match);
-      MA[g].alignment[x].length = alignment->length;
-      MA[g].alignment[x].backing_memory = alignment->backing_memory;
+      free_seq(alignment->match);
+      //MA[g].alignment[x].length = alignment->length;
+      //MA[g].alignment[x].backing_memory = alignment->backing_memory;
       free(alignment);
     }
-    free(C->main);
+    free_seq(C->main);
     free(C);
   }
 

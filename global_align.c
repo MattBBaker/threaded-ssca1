@@ -56,16 +56,16 @@ int verifyGlobal(ga_t G[], index_t size_g, int misPenalty, int gapPenalty, int m
  *     short                  - global alignment score
  */
 
-short scorePair(good_match_t *A, seq_t *first_seq, seq_t *second_seq, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4])
+short scorePair(good_match_t *A, seq_data_t *first_seq, seq_data_t *second_seq, int codon2bases[3][64], int gapPenalty, int disMatrix[4][4])
 {
-  codon_t X[first_seq->length];
-  codon_t Xb[(first_seq->length) * 3];
-  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->length );
+  seq_t *X = alloc_seq(first_seq->main->length);
+  codon_t Xb[(first_seq->main->length) * 3];
+  index_t length_x = scrub_hyphens(A, X, first_seq->main, first_seq->main->length );
   index_t n = length_x * 3;
 
-  codon_t Y[second_seq->length];
-  codon_t Yb[(second_seq->length) * 3];
-  index_t length_y = scrub_hyphens(A, Y, second_seq->main, second_seq->length );
+  seq_t *Y = alloc_seq(second_seq->main->length);
+  codon_t Yb[(second_seq->main->length) * 3];
+  index_t length_y = scrub_hyphens(A, Y, second_seq->main, second_seq->main->length );
   index_t m = length_y * 3;
 
   int adder;
@@ -80,16 +80,16 @@ short scorePair(good_match_t *A, seq_t *first_seq, seq_t *second_seq, int codon2
 
   for(int idx=0; idx < length_x; idx++)
   {
-    Xb[idx*3] = codon2bases[0][X[idx]];
-    Xb[idx*3+1] = codon2bases[1][X[idx]];
-    Xb[idx*3+2] = codon2bases[2][X[idx]];
+    Xb[idx*3] = codon2bases[0][X->sequence[idx]];
+    Xb[idx*3+1] = codon2bases[1][X->sequence[idx]];
+    Xb[idx*3+2] = codon2bases[2][X->sequence[idx]];
   }
 
   for(int idx=0; idx < length_y; idx++)
   {
-    Yb[idx*3] = codon2bases[0][Y[idx]];
-    Yb[idx*3+1] = codon2bases[1][Y[idx]];
-    Yb[idx*3+2] = codon2bases[2][Y[idx]];
+    Yb[idx*3] = codon2bases[0][Y->sequence[idx]];
+    Yb[idx*3+1] = codon2bases[1][Y->sequence[idx]];
+    Yb[idx*3+2] = codon2bases[2][Y->sequence[idx]];
   }
 
   for(int idx=0; idx < n; idx++)
@@ -110,6 +110,9 @@ short scorePair(good_match_t *A, seq_t *first_seq, seq_t *second_seq, int codon2
       V[jdx] = (V[jdx-1] + gapPenalty < V[jdx]) ? V[jdx-1] + gapPenalty : V[jdx];
     }
   }
+
+  free_seq(X);
+  free_seq(Y);
 
   return V[m-1];
 }

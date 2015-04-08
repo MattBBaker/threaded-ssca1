@@ -19,7 +19,13 @@
 #include <multiple_align.h>
 #include <limits.h>
 
+#ifdef USE_SHMEM
+#include <shmem.h>
+#endif
+
 unsigned int random_seed;
+int num_nodes;
+int rank;
 
 /* unsigned int get_dev_rand() - 
      routine to get an unsigned int from /dev/random.
@@ -103,6 +109,15 @@ int main(int argc, char **argv)
 
 #ifdef _OPENMP
   printf("Running with OpenMP\n");
+#endif
+
+#ifdef USE_SHMEM
+  start_pes(0);
+  num_nodes=shmem_n_pes();
+  rank=shmem_my_pe();
+#else
+  num_nodes=1;
+  rank=0;
 #endif
 
   init_parameters(&global_parameters);

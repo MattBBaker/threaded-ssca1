@@ -8,7 +8,7 @@
 typedef struct _ma_t
 {
   score_t *scores;
-  seq_t *alignment;
+  seq_data_t *alignment;
   index_t length;
 } ma_t;
 

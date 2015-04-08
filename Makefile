@@ -3,7 +3,7 @@
 COMPILER=gcc
 
 #comment out this line to turn off debugging code
-DEBUG=0
+DEBUG=1
 
 ifeq ($(COMPILER), pgi)
 	CC=pgcc
@@ -13,8 +13,8 @@ ifeq ($(COMPILER), pgi)
 endif
 
 ifeq ($(COMPILER), gcc)
-	CC=gcc 
-	COMMON_CFLAGS=-std=c99 -Wall -pipe -g -pg #-Werror #-pthread #-fopenmp
+	CC=gcc
+	COMMON_CFLAGS=-std=c99 -Wall -pipe -g #-pg #-Werror #-pthread #-fopenmp
 	OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
 	DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 endif

@@ -7,7 +7,7 @@ See file LICENSING for licensing information.
 
 *********************************************
 */
-
+#define _BSD_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <sort.h>
@@ -15,6 +15,9 @@ See file LICENSING for licensing information.
 #include <string.h>
 #include <util.h>
 #include <assert.h>
+
+#include <sys/time.h>
+
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -32,15 +35,37 @@ typedef struct
   score_t min_score;
 } current_ends_t;
 
-index_t unsigned_abs_diff(index_t A, index_t B) {
+static index_t unsigned_abs_diff(index_t A, index_t B) {
   return (A > B) ? (A - B) : (B - A);
 }
 
 index_t consider=0;
 index_t compact=0;
 
-void considerAdding(score_t score, int minSeparation, index_t main_index, index_t match_index,
-                    int maxReports, current_ends_t *score_ends) {
+void print_back_20(good_match_t *A, seq_t *in_seq, index_t end_index){
+  index_t start = end_index - 20;
+  char main_acid_chain[21];
+  char main_codon_chain[61];
+  seq_t this_seq;
+  this_seq.sequence = in_seq->sequence+start;
+  this_seq.length = 20;
+
+  memset(main_acid_chain, '\0', 21);
+  memset(main_codon_chain, '\0', 21);
+
+  assemble_acid_chain(A, main_acid_chain, &this_seq, 20);
+
+  assemble_codon_chain(A, main_codon_chain, &this_seq, 20);
+
+  printf("%7ld  %s  %s  %7ld\n",
+         start, main_acid_chain, main_codon_chain, end_index);
+}
+
+static void considerAdding(score_t score, int minSeparation, index_t main_index, index_t match_index,
+                    int maxReports, current_ends_t *score_ends, struct timeval *compaction_timer) {
+  struct timeval compaction_timer_start;
+  struct timeval compaction_timer_end;
+  gettimeofday(&compaction_timer_start, NULL);
   consider++;
   //first scan the list to see if there is a match already that is closer
   for(int idx=0; idx < score_ends->report; idx++){
@@ -49,9 +74,9 @@ void considerAdding(score_t score, int minSeparation, index_t main_index, index_
         score_ends->goodEnds[0][idx] = main_index;
         score_ends->goodEnds[1][idx] = match_index;
         score_ends->goodScores[idx] = score;
-        return;
+        goto record_time;
       } else {
-        return;
+        goto record_time;
       }
     }
   }
@@ -72,7 +97,7 @@ void considerAdding(score_t score, int minSeparation, index_t main_index, index_
 
     worst_keeper = score_ends->size - maxReports;
     score_ends->min_score = score_ends->goodScores[best_index[worst_keeper]];
-    printf("minScore is now %i\n", (int)score_ends->min_score);
+    //printf("minScore is now %i\n", (int)score_ends->min_score);
 
     for(int index_for_index=worst_keeper; index_for_index < score_ends->size; index_for_index++) {
       best_index[new_best_index] = index_array[index_for_index];
@@ -95,6 +120,10 @@ void considerAdding(score_t score, int minSeparation, index_t main_index, index_
   score_ends->goodEnds[1][score_ends->report] = match_index;
   score_ends->goodScores[score_ends->report] = score;
   score_ends->report++;
+ record_time:
+  gettimeofday(&compaction_timer_end, NULL);
+  timersub(&compaction_timer_end, &compaction_timer_start, &compaction_timer_start);
+  timeradd(&compaction_timer_start, compaction_timer, compaction_timer);
 }
 
 /* release_good_match:
@@ -120,8 +149,8 @@ void release_good_match(good_match_t *doomed)
   free(doomed->bestScores);
   for(int idx=0; idx<doomed->bestLength; idx++)
   {
-    free(doomed->bestSeqs[idx].main);
-    free(doomed->bestSeqs[idx].match);
+    free_seq(doomed->bestSeqs[idx].main);
+    free_seq(doomed->bestSeqs[idx].match);
   }
   free(doomed->bestSeqs);
   free(doomed);
@@ -145,20 +174,30 @@ void release_good_match(good_match_t *doomed)
  *       ->numReports - an integer, the number of reports represented
  */
 
+void display_elapsed(struct timeval *start_time);
+
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
 
+
+
 //void *pairwise_worker(void *data) {
-good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int minScore, int maxReports, int minSeparation) {
+good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, const int minScore, const int maxReports, const int minSeparation) {
+  struct timeval start_time;
+  gettimeofday(&start_time, NULL);
   const int sortReports = maxReports * 10;
-  const codon_t *mainSeq = seq_data->main;
-  const codon_t *matchSeq = seq_data->match;
+  const codon_t *restrict mainSeq = seq_data->main->sequence;
+  const codon_t *restrict matchSeq = seq_data->match->sequence;
   const score_t gapExtend = sim_matrix->gapExtend;
   const score_t gapFirst = sim_matrix->gapStart + gapExtend;
-  int max_threads = omp_get_max_threads();
+  const index_t main_len = seq_data->main->length;
+  const index_t match_len = seq_data->match->length;
+  codon_t current_main, current_match;
+  codon_t next_main, next_match;
+  const int max_threads = omp_get_max_threads();
   printf("Today we will be using %i threads\n", max_threads);
 
-  //current_ends_t *good_ends = (current_ends_t *)malloc(sizeof(current_ends_t));
   current_ends_t **good_ends = (current_ends_t **)malloc(sizeof(current_ends_t *)*max_threads);
+  struct timeval *compaction_timers = (struct timeval *)malloc(sizeof(struct timeval)*max_threads);
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
@@ -171,20 +210,21 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
     good_ends[idx]->goodEnds[0] = (index_t *)malloc(sizeof(index_t)*sortReports);
     good_ends[idx]->goodEnds[1] = (index_t *)malloc(sizeof(index_t)*sortReports);
     good_ends[idx]->min_score = minScore;
+    timerclear(&(compaction_timers[idx]));
   }
 
-  score_t *score_matrix = (score_t *)malloc(sizeof(score_t)*3*seq_data->matchLen);
+  score_t *restrict score_matrix = (score_t *)malloc(sizeof(score_t)*3*seq_data->match->length);
   assert(score_matrix != NULL);
-  score_t *match_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->matchLen);
+  score_t *restrict match_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->match->length);
   assert(match_gap_matrix != NULL);
-  score_t *main_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->matchLen);
+  score_t *restrict main_gap_matrix = (score_t *)malloc(sizeof(score_t)*2*seq_data->match->length);
   assert(main_gap_matrix != NULL);
   printf("touching score\n");
-  touch_memory(score_matrix, sizeof(score_t)*3*seq_data->matchLen);
+  touch_memory(score_matrix, sizeof(score_t)*3*seq_data->match->length);
   printf("touching match\n");
-  touch_memory(match_gap_matrix, sizeof(score_t)*2*seq_data->mainLen);
+  touch_memory(match_gap_matrix, sizeof(score_t)*2*seq_data->main->length);
   printf("touching main\n");
-  touch_memory(main_gap_matrix, sizeof(score_t)*2*seq_data->matchLen);
+  touch_memory(main_gap_matrix, sizeof(score_t)*2*seq_data->match->length);
   printf("done touching memory\n");
   index_t score_start, score_end;
   score_t G, W, E, F, cmp_a, cmp_b;
@@ -195,107 +235,131 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   good_match_t *answer;
 
   W = sim_matrix->similarity[mainSeq[0]][matchSeq[0]];
-  score_matrix[index2d(0,0,seq_data->matchLen)] = 0 > W ? 0 : W;
+  score_matrix[index2d(0,0,seq_data->match->length)] = 0 > W ? 0 : W;
   main_gap_matrix[0] = -gapFirst + W;
   match_gap_matrix[0] = -gapFirst + W;
 
   W = sim_matrix->similarity[mainSeq[0]][matchSeq[1]];
   G = W;
-  E = main_gap_matrix[index2d(0,0,seq_data->matchLen)];
+  E = main_gap_matrix[index2d(0,0,seq_data->match->length)];
   cmp_a = 0 > E ? 0 : E;
   cmp_a = cmp_a > G ? cmp_a : G;
-  score_matrix[index2d(1,1,seq_data->matchLen)] = cmp_a;
+  score_matrix[index2d(1,1,seq_data->match->length)] = cmp_a;
   cmp_a = E - gapExtend;
   cmp_b = G - gapFirst;
-  main_gap_matrix[index2d(1,0,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
-  match_gap_matrix[index2d(1,0,seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
+  main_gap_matrix[index2d(1,0,seq_data->match->length)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+  match_gap_matrix[index2d(1,0,seq_data->match->length)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
 
   W = sim_matrix->similarity[mainSeq[1]][matchSeq[0]];
   G = W;
-  F = match_gap_matrix[index2d(0,0,seq_data->matchLen)];
+  F = match_gap_matrix[index2d(0,0,seq_data->match->length)];
   cmp_a = 0 > F ? 0 : F;
   cmp_a = cmp_a > G ? cmp_a : G;
-  score_matrix[index2d(1,0,seq_data->matchLen)] = cmp_a;
+  score_matrix[index2d(1,0,seq_data->match->length)] = cmp_a;
   cmp_a = F - gapExtend;
   cmp_b = G - gapFirst;
-  main_gap_matrix[index2d(1,1,seq_data->matchLen)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
-  match_gap_matrix[index2d(1,1,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+  main_gap_matrix[index2d(1,1,seq_data->match->length)] = -gapFirst > cmp_b ? -gapFirst : cmp_b;
+  match_gap_matrix[index2d(1,1,seq_data->match->length)] = cmp_a > cmp_b ? cmp_a : cmp_b;
 
-  for(index_t idx=2; idx < seq_data->matchLen * 2; idx++) {
-    //minScore = good_ends->min_score;
-    score_start = idx > (seq_data->matchLen - 1) ? (idx-(seq_data->matchLen-1)) : 0;
-    score_end = idx < (seq_data->matchLen-1) ? (idx) : (seq_data->matchLen-1);
-    if(idx < seq_data->matchLen) {
+  printf("Init time\n");
+  display_elapsed(&start_time);
+  gettimeofday(&start_time, NULL);  
+
+  for(index_t idx=2; idx < seq_data->match->length * 2; idx++) {
+    score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
+    score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
+    if(idx < seq_data->match->length) {
       m = 0;
       n = idx;
       W = sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
       G = W;
-      F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->matchLen)];
+      F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->match->length)];
       cmp_a = F > 0 ? F : 0;
       cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
-      if((W > 0 && cmp_a > minScore && cmp_a == G) &&
-         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+      score_matrix[index2d((idx%3),m,seq_data->match->length)] = cmp_a;
+      if((W > 0 && cmp_a > good_ends[0]->min_score && cmp_a == G) &&
+         ((m == seq_data->match->length - 1) || (n == seq_data->match->length - 1) ||
           (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends[0]);
+        considerAdding(score_matrix[index2d((idx%3),m,seq_data->match->length)], minSeparation, m, n, maxReports, good_ends[0], &(compaction_timers[0]));
       }
       cmp_a = F - gapExtend;
       cmp_b = G - gapFirst;
-      match_gap_matrix[index2d(idx%2,n,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      match_gap_matrix[index2d(idx%2,n,seq_data->match->length)] = cmp_a > cmp_b ? cmp_a : cmp_b;
       score_start = score_start+1;
 
       m = idx;
       n = 0;
-      E = main_gap_matrix[index2d((idx-1)%2,m-1,seq_data->matchLen)];
+      E = main_gap_matrix[index2d((idx-1)%2,m-1,seq_data->match->length)];
       cmp_a = E > 0 ? E : 0;
       cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
-      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
-         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+      score_matrix[index2d((idx%3),m,seq_data->match->length)] = cmp_a;
+      if((cmp_a > good_ends[0]->min_score && W > 0 && cmp_a == G) &&
+         ((m == seq_data->match->length - 1) || (n == seq_data->match->length - 1) ||
           (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends[0]);
+        considerAdding(score_matrix[index2d((idx%3),m,seq_data->match->length)], minSeparation, m, n, maxReports, good_ends[0], &(compaction_timers[0]));
       }
       cmp_a = E - gapExtend;
       cmp_b = G - gapFirst;
-      main_gap_matrix[index2d(idx%2,m,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      main_gap_matrix[index2d(idx%2,m,seq_data->match->length)] = cmp_a > cmp_b ? cmp_a : cmp_b;
       score_end = score_end - 1;
     }
 
+    //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
+#if 0
 #ifdef _OPENMP
-#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b) firstprivate(idx, score_matrix, sim_matrix, main_gap_matrix, match_gap_matrix, seq_data, minScore, minSeparation, maxReports) shared(good_ends) schedule(static)
+#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b,next_main,next_match) //schedule(static) //firstprivate(idx,main_len,match_len,score_end) schedule(static)
+#endif
 #endif
     for(index_t antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
-      //good_ends_t *my_end = good_ends[omp_get_thread_num()];
       m = antidiagonal;
       n = idx - m;
 
+      current_main = next_main;
+      current_match = next_match;
+
+      if (m < (seq_data->main->length-1))
+        next_main = mainSeq[m+1];
+      if (n > 0)
+        next_match = matchSeq[n-1];
+
       //W is the score for the current match. G is the current match added to the previous score.
       //F is the score with a gap in the match sequence and E is the score with a gap in the main sequence
-      W = sim_matrix->similarity[mainSeq[m]][matchSeq[n]];
-      G = score_matrix[index2d(((idx-2)%3),m-1,seq_data->matchLen)] + W;
-      F = match_gap_matrix[index2d((idx-1)%2,n-1,seq_data->matchLen)];
-      E = main_gap_matrix[index2d((idx-1)%2,m-1,seq_data->matchLen)];
+      F = match_gap_matrix[index2d((idx-1)%2,n-1,match_len)];
+      E = main_gap_matrix[index2d((idx-1)%2,m-1,main_len)];
       cmp_a = 0;
       cmp_a = cmp_a > E ? cmp_a : E;
       cmp_a = cmp_a > F ? cmp_a : F;
+      W = sim_matrix->similarity[current_main][current_match];
+      G = score_matrix[index2d(((idx-2)%3),m-1,match_len)] + W;
       cmp_a = cmp_a > G ? cmp_a : G;
-      score_matrix[index2d((idx%3),m,seq_data->matchLen)] = cmp_a;
-      if((cmp_a > minScore && W > 0 && cmp_a == G) &&
-         ((m == seq_data->matchLen - 1) || (n == seq_data->matchLen - 1) ||
+      score_matrix[index2d((idx%3),m,match_len)] = cmp_a;
+      if((cmp_a > good_ends[omp_get_thread_num()]->min_score && W > 0 && cmp_a == G) &&
+         ((m == main_len - 1) || (n == match_len - 1) ||
           (sim_matrix->similarity[mainSeq[m+1]][matchSeq[n+1]] <= 0))) {
-#ifdef _OPENMP
-        //#pragma omp critical
-#endif
-        considerAdding(score_matrix[index2d((idx%3),m,seq_data->matchLen)], minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        considerAdding(score_matrix[index2d((idx%3),m,match_len)], minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()], &(compaction_timers[omp_get_thread_num()]));
       }
       //cmp_b covers a new gap, while cmp_a covers extending a previous gap.
       cmp_a = E - gapExtend;
       cmp_b = G - gapFirst;
-      main_gap_matrix[index2d((idx)%2,m,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      main_gap_matrix[index2d((idx)%2,m,match_len)] = cmp_a > cmp_b ? cmp_a : cmp_b;
       cmp_a = F - gapExtend;
-      match_gap_matrix[index2d((idx)%2,n,seq_data->matchLen)] = cmp_a > cmp_b ? cmp_a : cmp_b;
+      match_gap_matrix[index2d((idx)%2,n,match_len)] = cmp_a > cmp_b ? cmp_a : cmp_b;
     }
   }
+
+  printf("Main loop finished\n");
+  display_elapsed(&start_time);
+  gettimeofday(&start_time, NULL);
+
+  for(int idx=1; idx < max_threads; idx++) {
+    timeradd(&(compaction_timers[0]), &(compaction_timers[idx]), &(compaction_timers[0]));
+  }
+
+  printf("Compaction time (across all threads)\n");
+  gettimeofday(&start_time, NULL);
+  timersub(&start_time, &(compaction_timers[0]), &start_time);
+  display_elapsed(&start_time);
+  gettimeofday(&start_time, NULL);
 
   answer = (good_match_t*)malloc(sizeof(good_match_t));
   answer->simMatrix = sim_matrix;
@@ -330,12 +394,12 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
 
   if(max_values > maxReports) max_values = maxReports;
 
-  int thread_idx, entry_idx;
+  int thread_idx;
   int entry;
   for(int idx=0; idx < max_values; idx++) {
     entry = index_array[copied-(idx+1)];
     thread_idx = 0;
-    entry_idx = 0;
+    //entry_idx = 0;
     while( entry >= good_ends[thread_idx]->report ) {
       entry -= good_ends[thread_idx]->report;
       thread_idx++;
@@ -343,14 +407,20 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
     answer->goodScores[idx] = good_ends[thread_idx]->goodScores[entry];
     answer->goodEnds[0][idx] = good_ends[thread_idx]->goodEnds[0][entry];
     answer->goodEnds[1][idx] = good_ends[thread_idx]->goodEnds[1][entry];
+
+    //void print_back_20(good_match_t *A, seq_t *in_seq, index_t end_index)
+    print_back_20(answer, seq_data->main, answer->goodEnds[0][idx]);
+    print_back_20(answer, seq_data->match, answer->goodEnds[1][idx]);
   }
 
-  printf("Consider may be hit %lu times.\n", seq_data->matchLen * seq_data->matchLen);
+  printf("Consider may be hit %lu times.\n", seq_data->match->length * seq_data->match->length);
   printf("Consider was it %lu times\nCompacted %lu times\n", consider, compact);
   float consider_pct, compact_pct;
-  consider_pct = (float)(consider) / (float)(seq_data->matchLen * seq_data->matchLen);
-  compact_pct = (float)(compact) / (float)(seq_data->matchLen * seq_data->matchLen);
+  consider_pct = (float)(consider) / (float)(seq_data->match->length * seq_data->match->length);
+  compact_pct = (float)(compact) / (float)(seq_data->match->length * seq_data->match->length);
   printf("Percentage of iterations were a score was considered: %f\nPercentage of iterations where scores were compacted: %f\n", consider_pct * 100.0, compact_pct * 100.0);
+  printf("Done with result orgainization");
+  display_elapsed(&start_time);
 
   free(score_matrix);
   free(main_gap_matrix);
@@ -366,5 +436,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, int
   free(sort_array);
   free(index_array);
   answer->numReports = max_values;
+  free(compaction_timers);
   return answer;
 }

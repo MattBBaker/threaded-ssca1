@@ -7,6 +7,7 @@
 
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
 
+/*
 typedef struct _seq_t
 {
   codon_t *main;
@@ -14,6 +15,8 @@ typedef struct _seq_t
   index_t length;
   index_t backing_memory; //NOTE: right now this is only used in multipleAlign, before that backing memory is the same as length
 } seq_t;
+*/
+
 
 // all pointers of of length numReports
 typedef struct _good_match_t
@@ -26,7 +29,7 @@ typedef struct _good_match_t
   index_t *bestStarts[2]; // location of the best starting points
   index_t *bestEnds[2]; // location of the best end points
   score_t *bestScores; // location of the best scores
-  seq_t *bestSeqs; // list of the best sequences
+  seq_data_t *bestSeqs; // list of the best sequences
   index_t bestLength;
 } good_match_t;
 

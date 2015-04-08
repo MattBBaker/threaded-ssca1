@@ -11,14 +11,18 @@
  *  maxValidation - [Integer] longest matching validation string.
  */
 
+/*
 typedef struct _seq_data
 {
   codon_t *main;
   codon_t *match;
   index_t mainLen;
+  index_t node_main;
   index_t matchLen;
+  index_t node_match;
   int maxValidation;
 } seq_data_t;
+*/
 
 seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t matchLen, int constant_rng);
 void release_scal_data(seq_data_t *doomed_scal_data);

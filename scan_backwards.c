@@ -27,7 +27,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   }
   for(int m=0; m < A->bestLength; m++)
   {
-    score = simple_score(A, A->bestSeqs[m].main, A->bestSeqs[m].match, A->bestSeqs[m].length);
+    score = simple_score(A, A->bestSeqs[m].main, A->bestSeqs[m].match);
     if(score != A->bestScores[m])
     {
       retval = 1;
@@ -40,21 +40,21 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     }
     if(m < maxDisplay)
     {
-      char main_acid_chain[A->bestSeqs[m].length+1];
-      char match_acid_chain[A->bestSeqs[m].length+1];
-      char main_codon_chain[A->bestSeqs[m].length*3+1];
-      char match_codon_chain[A->bestSeqs[m].length*3+1];
+      char main_acid_chain[A->bestSeqs[m].main->length+1];
+      char match_acid_chain[A->bestSeqs[m].match->length+1];
+      char main_codon_chain[A->bestSeqs[m].main->length*3+1];
+      char match_codon_chain[A->bestSeqs[m].match->length*3+1];
 
-      memset(main_acid_chain, '\0', A->bestSeqs[m].length+1);
-      memset(match_acid_chain, '\0', A->bestSeqs[m].length+1);
-      memset(main_codon_chain, '\0', A->bestSeqs[m].length*3+1);
-      memset(match_codon_chain, '\0', A->bestSeqs[m].length*3+1);
+      memset(main_acid_chain, '\0', A->bestSeqs[m].main->length+1);
+      memset(match_acid_chain, '\0', A->bestSeqs[m].match->length+1);
+      memset(main_codon_chain, '\0', A->bestSeqs[m].main->length*3+1);
+      memset(match_codon_chain, '\0', A->bestSeqs[m].match->length*3+1);
 
-      assemble_acid_chain(A, main_acid_chain, A->bestSeqs[m].main, A->bestSeqs[m].length);
-      assemble_acid_chain(A, match_acid_chain, A->bestSeqs[m].match, A->bestSeqs[m].length);
+      assemble_acid_chain(A, main_acid_chain, A->bestSeqs[m].main, A->bestSeqs[m].main->length);
+      assemble_acid_chain(A, match_acid_chain, A->bestSeqs[m].match, A->bestSeqs[m].match->length);
 
-      assemble_codon_chain(A, main_codon_chain, A->bestSeqs[m].main, A->bestSeqs[m].length);
-      assemble_codon_chain(A, match_codon_chain, A->bestSeqs[m].match, A->bestSeqs[m].length);
+      assemble_codon_chain(A, main_codon_chain, A->bestSeqs[m].main, A->bestSeqs[m].main->length);
+      assemble_codon_chain(A, match_codon_chain, A->bestSeqs[m].match, A->bestSeqs[m].match->length);
 
       printf("%7ld  %s  %s  %7ld\n%7ld  %s  %s  %7ld\n", 
              A->bestStarts[0][m], main_acid_chain, main_codon_chain, A->bestEnds[0][m],
@@ -87,7 +87,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
  */
 
   /* Matlab allows for a = [1 2] and b = [0 a] and b will be [0 1 2].  Obviously we can't have that in C. */
-  void tracepath(good_match_t *A, int sizeT, int *T, int ei, int ej, int i, int j, int dir, int rs[2], seq_t *sequence, int depth) {
+  void tracepath(good_match_t *A, int sizeT, int *T, int ei, int ej, int i, int j, int dir, int rs[2], seq_data_t *sequence, int depth) {
   int Ci;
   int Cj;
 
@@ -104,9 +104,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   {
     rs[0] = i + 1;
     rs[1] = j + 1;
-    sequence->main = (codon_t*)malloc(sizeof(codon_t)*depth);
-    sequence->match = (codon_t*)malloc(sizeof(codon_t)*depth);
-    sequence->length = depth;
+    sequence->main = alloc_seq(depth);
+    sequence->match = alloc_seq(depth);
     return;
   }
 
@@ -121,16 +120,16 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     rs[1] = -1;
   }
 
-  Ci = A->seqData->main[ei-i];
-  Cj = A->seqData->match[ej-j];
+  Ci = A->seqData->main->sequence[ei-i];
+  Cj = A->seqData->match->sequence[ej-j];
 
   if(dir & 4)
   {
     tracepath(A, sizeT, T, ei, ej, i-1, j-1, 0, rs, sequence, depth+1);
     if(rs[0]!=-1)
     {
-      sequence->main[depth] = Ci;
-      sequence->match[depth] = Cj;
+      sequence->main->sequence[depth] = Ci;
+      sequence->match->sequence[depth] = Cj;
       return;
     }
   }
@@ -140,8 +139,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     tracepath(A, sizeT, T,  ei, ej,i-1, j, 2, rs, sequence, depth+1);
     if(rs[0]!=-1)
     {
-      sequence->main[depth] = Ci;
-      sequence->match[depth] = A->simMatrix->hyphen;
+      sequence->main->sequence[depth] = Ci;
+      sequence->match->sequence[depth] = A->simMatrix->hyphen;
       return;
     }
   }
@@ -151,8 +150,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     tracepath(A, sizeT, T, ei, ej, i, j-1, 1, rs, sequence, depth+1);
     if(rs[0]!=-1)
     {
-      sequence->main[depth] = A->simMatrix->hyphen;
-      sequence->match[depth] = Cj;
+      sequence->main->sequence[depth] = A->simMatrix->hyphen;
+      sequence->match->sequence[depth] = Cj;
       return;
     }
   }
@@ -188,12 +187,12 @@ int verify_alignment(good_match_t *A, int maxDisplay)
  */
 
 void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
-  int goal = A->goodScores[report];
-  int ei = A->goodEnds[0][report];
-  int ej = A->goodEnds[1][report];
+  score_t goal = A->goodScores[report];
+  index_t ei = A->goodEnds[0][report];
+  index_t ej = A->goodEnds[1][report];
 
-  codon_t *mainSeq = A->seqData->main;
-  codon_t *matchSeq = A->seqData->match;
+  codon_t *mainSeq = A->seqData->main->sequence;
+  codon_t *matchSeq = A->seqData->match->sequence;
   int gapExtend = A->simMatrix->gapExtend;
   int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;        // total penalty for first codon in gap
 
@@ -205,7 +204,7 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   int compare_a, compare_b;
   int rs[2];
 
-  int sizeT = 2 * (A->simMatrix->matchLimit > A->seqData->maxValidation ? A->simMatrix->matchLimit : A->seqData->maxValidation);
+  int sizeT = 2 * (A->simMatrix->matchLimit > A->seqData->max_validation ? A->simMatrix->matchLimit : A->seqData->max_validation);
   int *T = malloc(sizeof(int) * sizeT * sizeT);
   memset(T, '\0', sizeof(int) * sizeT * sizeT);
 
@@ -239,7 +238,7 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   fi = ei; 
   lj = ej; // first point on the diagnal
   v = 1;
-  seq_t test_seq;
+  seq_data_t test_seq;
 
   while(fi > 0) // loop over diagnal starting positions
   {
@@ -395,14 +394,14 @@ void scanBackward(good_match_t *A, int maxReports, int minSeparation)
   A->bestEnds[0] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
   A->bestEnds[1] = (index_t *)malloc(maxReports*sizeof(index_t)*2);
   A->bestScores = (score_t *)malloc(maxReports*sizeof(score_t)*2);
-  A->bestSeqs = (seq_t *)malloc(maxReports * sizeof(seq_t)*2);
+  A->bestSeqs = (seq_data_t *)malloc(maxReports * sizeof(seq_data_t)*2);
 
   memset(A->bestStarts[0], '\0', sizeof(index_t) * maxReports);
   memset(A->bestStarts[1], '\0', sizeof(index_t) * maxReports);
   memset(A->bestEnds[0], '\0', sizeof(index_t) * maxReports);
   memset(A->bestEnds[1], '\0', sizeof(index_t) * maxReports);
   memset(A->bestScores, '\0', sizeof(score_t) * maxReports);
-  memset(A->bestSeqs, '\0', sizeof(seq_t) * maxReports);
+  memset(A->bestSeqs, '\0', sizeof(seq_data_t) * maxReports);
 
   int bestR = 0;
 

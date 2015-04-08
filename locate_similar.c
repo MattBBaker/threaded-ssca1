@@ -25,7 +25,7 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
   {
     for(int m=0; m < S[b]->bestLength; m++)
     {
-      score = simple_score(A, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].length);
+      score = simple_score(A, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].match);
       if(score != S[b]->bestScores[m])
       {
         retval = 1;
@@ -39,23 +39,23 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
       }
       if(display_count > b)
       {
-        char main_acid_chain[S[b]->bestSeqs[m].length+1];
-        char match_acid_chain[S[b]->bestSeqs[m].length+1];
-        char main_codon_chain[S[b]->bestSeqs[m].length*3+1];
-        char match_codon_chain[S[b]->bestSeqs[m].length*3+1];
+        char main_acid_chain[S[b]->bestSeqs[m].main->length+1];
+        char match_acid_chain[S[b]->bestSeqs[m].match->length+1];
+        char main_codon_chain[S[b]->bestSeqs[m].main->length*3+1];
+        char match_codon_chain[S[b]->bestSeqs[m].match->length*3+1];
 
-        memset(main_acid_chain, '\0', S[b]->bestSeqs[m].length+1);
-        memset(match_acid_chain, '\0', S[b]->bestSeqs[m].length+1);
-        memset(main_codon_chain, '\0', S[b]->bestSeqs[m].length*3+1);
-        memset(match_codon_chain, '\0', S[b]->bestSeqs[m].length*3+1);
+        memset(main_acid_chain, '\0', S[b]->bestSeqs[m].main->length+1);
+        memset(match_acid_chain, '\0', S[b]->bestSeqs[m].match->length+1);
+        memset(main_codon_chain, '\0', S[b]->bestSeqs[m].main->length*3+1);
+        memset(match_codon_chain, '\0', S[b]->bestSeqs[m].match->length*3+1);
 
-        assemble_acid_chain(A, main_acid_chain, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].length);
-        assemble_acid_chain(A, match_acid_chain, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].length);
+        assemble_acid_chain(A, main_acid_chain, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].main->length);
+        assemble_acid_chain(A, match_acid_chain, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].match->length);
 
         //assemble_codon_chain(S[b]->bestSeqs[m].length, S[b]->bestSeqs[m].main, main_codon_chain, A);
         //assemble_codon_chain(S[b]->bestSeqs[m].length, S[b]->bestSeqs[m].match, match_codon_chain, A);
-        assemble_codon_chain(A, main_codon_chain, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].length);
-        assemble_codon_chain(A, match_codon_chain, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].length);
+        assemble_codon_chain(A, main_codon_chain, S[b]->bestSeqs[m].main, S[b]->bestSeqs[m].main->length);
+        assemble_codon_chain(A, match_codon_chain, S[b]->bestSeqs[m].match, S[b]->bestSeqs[m].match->length);
 
         printf("%7ld  %s  %s  %7ld\n%7ld  %s  %s  %7ld\n",
                S[b]->bestStarts[0][m], main_acid_chain, main_codon_chain, S[b]->bestEnds[0][m],
@@ -77,16 +77,15 @@ int verify_similar(good_match_t *A, good_match_t *S[], int length_s, int maxDisp
  * to merge them?
  */
 
-void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_t T[maxResult][sequence_length], codon_t *mainSeq, codon_t *matchSeq, int ci, int cj, int dir, int depth, seq_t *sequence, int rs[2])
+void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_t T[maxResult][sequence_length], seq_t *mainSeq, seq_t *matchSeq, int ci, int cj, int dir, int depth, seq_data_t *sequence, int rs[2])
 {
   int Ci, Cj, iT;
   if(ci== -1 || cj == -1 || depth >= maxResult)  // if done
   {
     rs[0] = ci+1;
     rs[1] = cj+1;
-    sequence->main = (codon_t*)malloc(depth * sizeof(codon_t));
-    sequence->match = (codon_t*)malloc(depth * sizeof(codon_t));
-    sequence->length = depth;
+    sequence->main = alloc_seq(depth);
+    sequence->match = alloc_seq(depth);
     return;
   }
 
@@ -104,16 +103,16 @@ void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_
     return;
   }
 
-  Ci = mainSeq[ci];
-  Cj = matchSeq[cj];
+  Ci = mainSeq->sequence[ci];
+  Cj = matchSeq->sequence[cj];
 
   if(dir & 4) // match
   {
     tracepath_s(A, maxResult, sequence_length, T, mainSeq, matchSeq, ci-1, cj-1, 0, depth+1, sequence, rs);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequence->main[sequence->length-depth-1] = Ci;
-      sequence->match[sequence->length-depth-1] = Cj;
+      sequence->main->sequence[sequence->main->length-depth-1] = Ci;
+      sequence->match->sequence[sequence->main->length-depth-1] = Cj;
       return;
     }
   }
@@ -123,8 +122,8 @@ void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_
     tracepath_s(A, maxResult, sequence_length, T, mainSeq, matchSeq, ci-1, cj, 2, depth+1, sequence, rs);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequence->main[sequence->length-depth-1] = Ci;
-      sequence->match[sequence->length-depth-1] = A->simMatrix->hyphen;
+      sequence->main->sequence[sequence->main->length-depth-1] = Ci;
+      sequence->match->sequence[sequence->match->length-depth-1] = A->simMatrix->hyphen;
       return;
     }
   }
@@ -134,8 +133,8 @@ void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_
     tracepath_s(A, maxResult, sequence_length, T, mainSeq, matchSeq, ci, cj-1, 1, depth+1, sequence, rs);
     if(rs[0] != -1 && rs[1] != -1)
     {
-      sequence->main[sequence->length-depth-1] = A->simMatrix->hyphen;
-      sequence->match[sequence->length-depth-1] = Cj;
+      sequence->main->sequence[sequence->main->length-depth-1] = A->simMatrix->hyphen;
+      sequence->match->sequence[sequence->match->length-depth-1] = Cj;
       return;
     }
   }
@@ -148,11 +147,11 @@ void tracepath_s(good_match_t *A, int maxResult, index_t sequence_length, score_
  * try and merge them?  Looks non-trivial to do.
  */
 
-void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxReports, index_t *bestStarts[2], index_t *bestEnds[2], seq_t *bestSeqs, score_t *bestScores, int *minScore, int minSeparation, score_t *V, int i, int j, int maxResult, int sequence_length, score_t T[maxResult][sequence_length], codon_t *mainSeq, codon_t *matchSeq)
+void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxReports, index_t *bestStarts[2], index_t *bestEnds[2], seq_data_t *bestSeqs, score_t *bestScores, int *minScore, int minSeparation, score_t *V, int i, int j, int maxResult, int sequence_length, score_t T[maxResult][sequence_length], seq_t *mainSeq, seq_t *matchSeq)
 {
   int elements_to_copy;
   int rs[2];
-  seq_t consider_seq;
+  seq_data_t consider_seq;
 
   for(int r=(*report)-1; r >=0; r--)
   {
@@ -162,8 +161,8 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
     // discard point r
     elements_to_copy = (*report);
 
-    free(bestSeqs[r].main);
-    free(bestSeqs[r].match);
+    free_seq(bestSeqs[r].main);
+    free_seq(bestSeqs[r].match);
 
     for(int idx = r; idx < elements_to_copy; idx++)
     {
@@ -174,7 +173,6 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
       bestStarts[0][idx]=bestStarts[1][idx+1];
       bestSeqs[idx].main = bestSeqs[idx+1].main;
       bestSeqs[idx].match = bestSeqs[idx+1].match;
-      bestSeqs[idx].length = bestSeqs[idx+1].length;
     }
 
     bestSeqs[*report].main = NULL;
@@ -185,8 +183,8 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
   tracepath_s(A, maxResult, sequence_length, T, mainSeq, matchSeq, i, j, 0, 0, &consider_seq, rs);
   if(rs[1] != 0)
   {
-    free(consider_seq.main);
-    free(consider_seq.match);
+    free_seq(consider_seq.main);
+    free_seq(consider_seq.match);
     return; // drop the sequence if our result was truncated
   }
 
@@ -195,16 +193,16 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
     if(rs[0]-bestStarts[0][r] >= minSeparation) break;
     if(bestScores[r] > V[j])
     {
-      free(consider_seq.main);
-      free(consider_seq.match);
+      free_seq(consider_seq.main);
+      free_seq(consider_seq.match);
       return;
     }
 
     // discard point r
     elements_to_copy = (*report);
 
-    free(bestSeqs[r].main);
-    free(bestSeqs[r].match);
+    free_seq(bestSeqs[r].main);
+    free_seq(bestSeqs[r].match);
 
     for(int idx = r; idx < elements_to_copy; idx++)
     {
@@ -215,8 +213,8 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
       bestStarts[0][idx]=bestStarts[1][idx+1];
       bestSeqs[idx].main = bestSeqs[idx+1].main;
       bestSeqs[idx].match = bestSeqs[idx+1].match;
-      bestSeqs[idx].length = bestSeqs[idx+1].length;
     }
+
     bestSeqs[*report].main = NULL;
     bestSeqs[*report].match = NULL;
     (*report)--;
@@ -228,7 +226,6 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
   bestEnds[1][*report] = j;
   bestSeqs[*report].main = consider_seq.main;
   bestSeqs[*report].match = consider_seq.match;
-  bestSeqs[*report].length = consider_seq.length;
   (*report)++;
 
   if(*report == sortReports)
@@ -262,12 +259,11 @@ void considerAdding_s(good_match_t *A, int *report, int sortReports, int maxRepo
       bestStarts[1][idx]=bestStarts[1][best_index[idx]];
       bestSeqs[idx].main = bestSeqs[best_index[idx]].main;
       bestSeqs[idx].match = bestSeqs[best_index[idx]].match;
-      bestSeqs[idx].length = bestSeqs[best_index[idx]].length;
     }
     for(int idx=new_best_index; idx < sortReports; idx++)
     {
-      free(bestSeqs[best_index[idx]].main);
-      free(bestSeqs[best_index[idx]].match);
+      free_seq(bestSeqs[best_index[idx]].main);
+      free_seq(bestSeqs[best_index[idx]].match);
     }
     *report = maxReports;
   }
@@ -287,7 +283,7 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
   score_t *working_scores = (score_t*)malloc(sortReports*sizeof(score_t));
   index_t *working_starts[2];
   index_t *working_ends[2];
-  seq_t *working_seqs = (seq_t*)malloc(sortReports*sizeof(seq_t));
+  seq_data_t *working_seqs = (seq_data_t*)malloc(sortReports*sizeof(seq_data_t));
   working_starts[0] = (index_t*)malloc(sortReports*sizeof(index_t));
   working_starts[1] = (index_t*)malloc(sortReports*sizeof(index_t));
   working_ends[0] = (index_t*)malloc(sortReports*sizeof(index_t));
@@ -297,12 +293,13 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
   memset(working_ends[0], 0, sortReports*sizeof(index_t));
   memset(working_starts[1], 0, sortReports*sizeof(index_t));
   memset(working_ends[1], 0, sortReports*sizeof(index_t));
-  memset(working_seqs, 0, sortReports*sizeof(seq_t));
-  codon_t matchSeq[A->bestSeqs[report_number].length];
-  codon_t *mainSeq = A->seqData->main;
+  memset(working_seqs, 0, sortReports*sizeof(seq_data_t));
+  //codon_t matchSeq[A->bestSeqs[report_number].length];
+  seq_t *matchSeq = alloc_seq(A->bestSeqs[report_number].main->length);
+  seq_t *mainSeq = A->seqData->main;
 
   // sequence_length is the same as m
-  index_t sequence_length = A->bestSeqs[report_number].length;
+  index_t sequence_length = A->bestSeqs[report_number].main->length;
   int maxResult = sequence_length * maxMatch;
   score_t T[maxResult][sequence_length];
   memset(T, 0, maxResult*sequence_length*sizeof(score_t));
@@ -318,7 +315,7 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
   index_t *index_array;// = malloc(sizeof(int)*maxReports);
 
   // previous kernels will insert hyphens into sequences to mark where a codon was inserted/deleted.  Clean those hyphens out
-  int tidy_length = scrub_hyphens(A, matchSeq, A->bestSeqs[report_number].match, A->bestSeqs[report_number].length);
+  int tidy_length = scrub_hyphens(A, matchSeq, A->bestSeqs[report_number].match, A->bestSeqs[report_number].match->length);
 
   for(int idx=0; idx < tidy_length; idx++)
   {
@@ -332,12 +329,12 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
    *  Smith-Waterman.
    */
 
-  for(int idx=0; idx < A->seqData->mainLen; idx++)
+  for(int idx=0; idx < A->seqData->main->length; idx++)
   {
     for(int jdx=0; jdx < tidy_length; jdx++)
     {
       adder = (jdx == 0) ? 0 : V[jdx-1];      
-      G[jdx] = A->simMatrix->similarity[mainSeq[idx]][matchSeq[jdx]] + adder;
+      G[jdx] = A->simMatrix->similarity[mainSeq->sequence[idx]][matchSeq->sequence[jdx]] + adder;
     }
 
     for(int jdx=0; jdx < tidy_length; jdx++) 
@@ -405,7 +402,7 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
     S->bestStarts[1] = (index_t*)malloc(report * sizeof(index_t));
     S->bestEnds[0] = (index_t*)malloc(report * sizeof(index_t));
     S->bestEnds[1] = (index_t*)malloc(report * sizeof(index_t));
-    S->bestSeqs = (seq_t*)malloc(report * sizeof(seq_t));
+    S->bestSeqs = (seq_data_t*)malloc(report * sizeof(seq_data_t));
 
     for(int jdx=report-1; jdx >= 0; jdx--)
     {
@@ -416,7 +413,6 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
       S->bestEnds[1][report-jdx-1]=working_ends[1][index_array[jdx]];
       S->bestSeqs[report-jdx-1].main = working_seqs[index_array[jdx]].main;
       S->bestSeqs[report-jdx-1].match = working_seqs[index_array[jdx]].match;
-      S->bestSeqs[report-jdx-1].length = working_seqs[index_array[jdx]].length;
     }
     S->bestLength=report;
   }
@@ -434,6 +430,7 @@ void locateSeq(good_match_t *A, int report_number, int minScore, int maxReports,
   free(Vg);
   free(sorted_array);
   free(index_array);
+  free_seq(matchSeq);
 }
 
 /*

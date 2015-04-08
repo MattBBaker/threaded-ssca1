@@ -18,9 +18,9 @@ void init_parameters(parameters_t *parameters)
   }
 
   parameters->ENABLE_PAUSE = 0;
-  parameters->ENABLE_VERIF = 0;
+  parameters->ENABLE_VERIF = 1;
   parameters->ENABLE_DEBUG = 0;
-  parameters->CONSTANT_RNG = 0;
+  parameters->CONSTANT_RNG = 1;
 
   /*
    *  Scalable Data Generator parameters.
