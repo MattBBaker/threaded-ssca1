@@ -48,16 +48,11 @@ LD=$(CC)
 CPPFLAGS=-I.
 LIBS=-lm
 
-COMMON_OBJS=parameters.o gen_sim_matrix.o gen_scal_data.o pairwise_align.o glibc_sort.o scan_backwards.o locate_similar.o util.o global_align.o multiple_align.o
+COMMON_OBJS=parameters.o gen_sim_matrix.o gen_scal_data.o pairwise_align.o glibc_sort.o scan_backwards.o util.o
 MAIN_OBJS=main.o
-TEST_OBJS=test_data.o test_main.o test_locate_similar.o merge_test.o test_multiple_align.o
 
 all: $(MAIN_OBJS) $(COMMON_OBJS)
 	$(LD) $(MAIN_OBJS) $(COMMON_OBJS) $(CFLAGS) $(LDFLAGS) -o ssca1 $(LIBS)
-
-# this will make a test to compare the output of this version against the expected output of the Matlab version
-test: $(TEST_OBJS) $(COMMON_OBJS)
-	$(LD) $(TEST_OBJS) $(COMMON_OBJS) $(CFLAGS) $(LDFLAGS) -o ssca1-test $(LIBS)
 
 clean:
 	rm -f $(COMMON_OBJS) $(TEST_OBJS) $(MAIN_OBJS) *~ core.* ssca1 ssca1-test

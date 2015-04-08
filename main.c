@@ -14,9 +14,6 @@
 #include <gen_scal_data.h>
 #include <pairwise_align.h>
 #include <scan_backwards.h>
-#include <locate_similar.h>
-#include <global_align.h>
-#include <multiple_align.h>
 #include <limits.h>
 
 #ifdef USE_SHMEM
@@ -104,8 +101,6 @@ int main(int argc, char **argv)
   seq_data_t *seq_data;
   struct timeval start_time;
   good_match_t *A;
-  ga_t *GA;
-  void *MA;
 
 #ifdef _OPENMP
   printf("Running with OpenMP\n");
@@ -192,48 +187,6 @@ int main(int argc, char **argv)
     verify_alignment(A, global_parameters.K2_DISPLAY);
   }
 
-  /* Kernel 3 run */
-
-  printf("\nBegining Kernel 3 execution.\n");
-
-  gettimeofday(&start_time, NULL);
-
-  locateSimilar(A,global_parameters.K3_MIN_SCORE, global_parameters.K3_MAX_REPORTS, global_parameters.K3_MIN_SEPARATION, global_parameters.K3_MAX_MATCH, S);
-
-  display_elapsed(&start_time);
-
-  if(global_parameters.ENABLE_VERIF)
-    verify_similar(A, S, A->bestLength, global_parameters.K3_DISPLAY);
-
-  /* Kernel 4 run */
-
-  printf("\nBegining Kernel 4 execution.\n");
-
-  gettimeofday(&start_time, NULL);
-
-  GA = globalAlign(A, A->bestLength, S, global_parameters.MISMATCH_PENALTY, global_parameters.SPACE_PENALTY);
-
-  display_elapsed(&start_time);
-
-  if(global_parameters.ENABLE_VERIF)
-    verifyGlobal(GA, A->bestLength, global_parameters.MISMATCH_PENALTY, global_parameters.SPACE_PENALTY, global_parameters.K4_DISPLAY);
-
-  /* Kernel 5 run */
-
-  printf("\nBegining Kernel 5 execution.\n");
-
-  gettimeofday(&start_time, NULL);
-
-  MA = multipleAlign(A, A->bestLength, S, GA, global_parameters.MISMATCH_PENALTY, global_parameters.SPACE_PENALTY);
-
-  display_elapsed(&start_time);
-
-  if(global_parameters.ENABLE_VERIF)
-    verifyMultiple(MA, A->bestLength, global_parameters.K5_DISPLAY);
-
-  for(int idx=0; idx < global_parameters.K3_MAX_REPORTS; idx++) release_good_match(S[idx]);
-  release_ma(MA, A->bestLength);
-  release_ga(GA, A->bestLength);
   release_good_match(A);
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);
