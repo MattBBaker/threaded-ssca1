@@ -265,7 +265,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   display_elapsed(&start_time);
   gettimeofday(&start_time, NULL);  
 
-  for(index_t idx=2; idx < seq_data->match->length * 2; idx++) {
+  for(index_t idx=2; idx < seq_data->match->length * 2 - 1; idx++) {
     score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
     score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
     if(idx < seq_data->match->length) {
@@ -303,6 +303,9 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       main_gap_matrix[index2d(idx%2,m,seq_data->match->length)] = cmp_a > cmp_b ? cmp_a : cmp_b;
       score_end = score_end - 1;
     }
+
+    next_main = mainSeq[score_start];
+    next_match = matchSeq[idx - score_start];
 
     //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
 #if 0
