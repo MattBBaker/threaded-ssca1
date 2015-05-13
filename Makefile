@@ -3,7 +3,7 @@
 COMPILER=gcc
 
 #comment out this line to turn off debugging code
-DEBUG=1
+#DEBUG=1
 
 ifeq ($(COMPILER), pgi)
 	CC=pgcc

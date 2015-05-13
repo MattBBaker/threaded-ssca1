@@ -4,6 +4,12 @@
 #include <pairwise_align.h>
 #include <types.h>
 
+//codon_t fetch_from_seq(const seq_t *in, index_t index);
+
+static inline codon_t fetch_from_seq(const seq_t *in, index_t codon_index){
+  return in->sequence[codon_index];
+}
+
 void touch_memory(void *mem, index_t size);
 index_t scrub_hyphens(good_match_t *A, seq_t *dest, seq_t *source, index_t length);
 void assemble_acid_chain(good_match_t *A, char *result, seq_t *chain, index_t length);

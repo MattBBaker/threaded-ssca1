@@ -32,11 +32,11 @@ void free_seq(seq_t *doomed){
 }
 
 /*
-  Fair note, this routine will cause memory utilities like Valgrind to whine viciously about
-  reads in uninitalized memory. This is because it is correct, this utility will just read
-  bytes in page size increments to fault in all pages and get real backing memory for them.
-  This causes no real problem, since the uninitalized bytes read don't do anything.
+codon_t fetch_from_seq(const seq_t *in, index_t codon_index){
+  return in->sequence[codon_index];
+}
 */
+
 void touch_memory(void *mem, size_t size) {
   index_t page_size = sysconf(_SC_PAGESIZE);
   index_t *this_memory = (index_t *)mem;
