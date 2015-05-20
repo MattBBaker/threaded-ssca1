@@ -15,10 +15,7 @@
 #include <pairwise_align.h>
 #include <scan_backwards.h>
 #include <limits.h>
-
-#ifdef USE_SHMEM
-#include <shmem.h>
-#endif
+#include <util.h>
 
 unsigned int random_seed;
 int num_nodes;
@@ -146,13 +143,19 @@ int main(int argc, char **argv)
   }
 
   printf("Using seed %u\n", random_seed);
-  srand(random_seed);
+
+  distribute_rng_seed(random_seed);
 
   gettimeofday(&start_time, NULL);
 
   printf("\nScalable Data Generator - genScalData() beginning execution...\n");
   sim_matrix = gen_sim_matrix(global_parameters.SIM_EXACT, global_parameters.SIM_SIMILAR, global_parameters.SIM_DISSIMILAR, global_parameters.GAP_START, global_parameters.GAP_EXTEND, global_parameters.MATCH_LIMIT);
-
+  /*
+  int gogogo=0;
+  printf("Ready to debug on pid=%i\n", getpid());
+  while(gogogo == 0){
+  }
+  */
   seq_data = gen_scal_data(sim_matrix, global_parameters.MAIN_SEQ_LENGTH, global_parameters.MATCH_SEQ_LENGTH, global_parameters.CONSTANT_RNG);
 
   display_elapsed(&start_time);

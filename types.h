@@ -10,11 +10,8 @@ extern int rank;
 
 #ifdef USE_SHMEM
 #define ssca1_distributed_malloc(x) shmalloc(x)
-typedef uint32_t codon_t;
+typedef uint16_t codon_t;
 typedef int16_t score_t;
-static inline void write_codon(codon_t codon, seq_t *sequence, index_t index){
-  
-}
 #else
 #define ssca1_distributed_malloc(x) malloc(x)
 typedef int_fast8_t codon_t;

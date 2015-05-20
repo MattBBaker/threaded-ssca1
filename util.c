@@ -5,6 +5,23 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+extern unsigned int random_seed;
+extern int num_nods;
+extern int rank;
+
+long seed_psync[_SHMEM_BCAST_SYNC_SIZE];
+
+void distribute_rng_seed(unsigned int new_seed){
+  for(int idx=0; idx < _SHMEM_BCAST_SYNC_SIZE; idx++){
+    seed_psync[idx] = _SHMEM_SYNC_VALUE;
+  }
+  shmem_broadcast32(&random_seed,&new_seed,1,0,0,0,num_nodes,seed_psync);
+}
+
+void seed_rng(int adjustment){
+  srand(random_seed + adjustment);
+}
+
 void extend_seq(seq_t *extended, index_t extend_size){
   codon_t *realloc_temp = (codon_t*)realloc(extended->sequence, sizeof(codon_t) * (extended->backing_memory + extend_size));
   if(realloc_temp == NULL)
@@ -17,25 +34,25 @@ void extend_seq(seq_t *extended, index_t extend_size){
 }
 
 seq_t *alloc_seq(index_t size){
-  seq_t *new = (seq_t*)malloc(sizeof(seq_t));
-  new->sequence = (codon_t*)malloc(sizeof(codon_t)*size);
+  seq_t *new = (seq_t*)shmalloc(sizeof(seq_t));
   new->length = size;
-  new->backing_memory = size;
-  new->local_size = size;
+  new->local_size = size / num_nodes;
+  new->backing_memory = new->local_size;
+  new->sequence = (codon_t*)shmalloc(sizeof(codon_t)*new->local_size);
+  printf("Seq alloc size %u\n", new->local_size);
+  if(new->sequence == NULL){
+    printf("Shmalloc error\n");
+    abort();
+  }
+  fflush(stdout);
   return new;
 }
 
 void free_seq(seq_t *doomed){
   if(doomed == NULL)return;
-  free(doomed->sequence);
-  free(doomed);
+  shfree(doomed->sequence);
+  shfree(doomed);
 }
-
-/*
-codon_t fetch_from_seq(const seq_t *in, index_t codon_index){
-  return in->sequence[codon_index];
-}
-*/
 
 void touch_memory(void *mem, size_t size) {
   index_t page_size = sysconf(_SC_PAGESIZE);
@@ -45,6 +62,7 @@ void touch_memory(void *mem, size_t size) {
   for(index_t idx=0; idx < size_max; idx+=size_increment) {
     this_memory[idx] = 0;
   }
+  this_memory[size_max-1] = 0;
 }
 
 /* Fix up a sequence to remove the gaps

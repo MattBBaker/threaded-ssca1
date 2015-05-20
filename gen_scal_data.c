@@ -10,6 +10,10 @@
 #include <omp.h>
 #endif
 
+extern unsigned int random_seed;
+extern int rank;
+extern int num_nodes;
+
 char validations[2][3][32] =
   {
     {"ACDEFG*IDENTICAL*HIKLMN", "ACDEFG*MISQRMATCHES*HIKLMN", "ACDEFG*STARTGAPMIDSTEND*HIKLMN"},
@@ -33,6 +37,7 @@ void verifyData(sim_matrix_t *simMatrix, seq_data_t *seqData)
 index_t *gen_indexes(int num_indexes, index_t rand_max, index_t min_seperation) {
   int not_done;
   index_t *indexes = (index_t*)malloc(sizeof(index_t) * num_indexes);
+
   do{
     not_done = 0;
     for(int idx=0; idx < num_indexes; idx++) {
@@ -47,28 +52,28 @@ index_t *gen_indexes(int num_indexes, index_t rand_max, index_t min_seperation) 
   return indexes;
 }
 
-void create_sequence(codon_t *sequence, char validations[][32], index_t sequence_length, int num_validations, sim_matrix_t *simMatrix){
-  //void create_sequence(codon_t *sequence, index_t sequence_length){
-  index_t total_length = sequence_length;
+void create_sequence(seq_t *sequence, char validations[][32], int num_validations, sim_matrix_t *simMatrix){
+  index_t total_length = sequence->length;
   index_t end;
   index_t *indexes = gen_indexes(num_validations, total_length-32, 32);
+  codon_t temp;
 
-  for(index_t idx=0; idx < sequence_length; idx++) {
-    sequence[idx] = rand()%64;
+  for(index_t idx=0; idx < sequence->local_size; idx++) {
+    sequence->sequence[idx] = rand()%64;
   }
 
-  for(int idx=0; idx < num_validations; idx++) {
-    end = strlen(validations[idx]);
-    printf("Inserting sequence %s in location %lu\n", validations[idx], indexes[idx]);
-    for(int jdx=0; jdx < end; jdx++){
-      sequence[indexes[idx]+jdx] = simMatrix->encode[(int)validations[idx][jdx]];
+  if(rank == 0){
+    for(int idx=0; idx < num_validations; idx++) {
+      end = strlen(validations[idx]);
+      printf("Inserting sequence %s in location %lu\n", validations[idx], indexes[idx]);
+      for(int jdx=0; jdx < end; jdx++){
+        write_to_seq(sequence, indexes[idx]+jdx, simMatrix->encode[(int)validations[idx][jdx]]);
+      }
     }
   }
   free(indexes);
 
 }
-
-//void insert_validation(codon_t 
 
 seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t matchLen, int constant_rng) {
   seq_data_t *new_scal_data = (seq_data_t *)malloc(sizeof(seq_data_t));
@@ -84,33 +89,15 @@ seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t mat
   }
 
   new_scal_data->max_validation -= 12;
+
   index_t main_size_with_validation = mainLen + validation_size;
   index_t match_size_with_validation = mainLen + validation_size;
-  //new_scal_data->main->length = mainLen + validation_size;
-  //new_scal_data->match->length = matchLen + validation_size;
-  //Some fix ups to allow this to work distributed. Keep the amount of data the same across all nodes.
-  if(main_size_with_validation % num_nodes != 0) {
-    main_size_with_validation += (num_nodes - (main_size_with_validation % num_nodes));
-  }
-
-  if(match_size_with_validation % num_nodes!= 0) {
-    match_size_with_validation += (num_nodes - (match_size_with_validation % num_nodes));
-  }
-
-  //new_scal_data->main->local_size = new_scal_data->main->length/num_nodes;
-  //new_scal_data->match->local_size = new_scal_data->match->length/num_nodes;
-
-  //new_scal_data->main->sequence = (codon_t*)ssca1_distributed_malloc(new_scal_data->main->local_size*sizeof(codon_t));
-  //new_scal_data->match->sequence = (codon_t*)ssca1_distributed_malloc(new_scal_data->match->local_size*sizeof(codon_t));
-
-  //new_scal_data->main = (codon_t*)ssca1_distributed_malloc(sizeof(codon_t)*new_scal_data->mainLen);
-  //new_scal_data->match= (codon_t*)ssca1_distributed_malloc(sizeof(codon_t)*new_scal_data->matchLen);
 
   new_scal_data->main = alloc_seq(main_size_with_validation);
   new_scal_data->match = alloc_seq(match_size_with_validation);
 
-  codon_t *gen_sequences[2] = {new_scal_data->main->sequence, new_scal_data->match->sequence};
-  index_t seq_lengths[2] = {new_scal_data->main->local_size, new_scal_data->match->local_size};
+  seq_t *gen_sequences[2] = {new_scal_data->main, new_scal_data->match};
+  seed_rng(rank + 1);
 
 #ifdef _OPENMP
   int thread_number = 2;
@@ -121,17 +108,14 @@ seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t mat
 #pragma omp parallel for num_threads(thread_number)
 #endif
   for(int idx=0; idx < 2; idx++){
-    touch_memory(gen_sequences[idx], sizeof(codon_t)*seq_lengths[idx]);
-    //create_sequence(gen_sequences[idx], seq_lengths[idx]);
-    create_sequence(gen_sequences[idx], validations[idx], seq_lengths[idx], 3, simMatrix);
+    touch_memory(gen_sequences[idx]->sequence, sizeof(codon_t)*gen_sequences[idx]->backing_memory);
+    create_sequence(gen_sequences[idx], validations[idx], 3, simMatrix);
   }
 
   return new_scal_data;
 }
 
 void release_scal_data(seq_data_t *doomed_seq) {
-  //free((void *)(doomed_seq->main));
-  //free((void *)(doomed_seq->match));
   free_seq(doomed_seq->main);
   free_seq(doomed_seq->match);
   free((void *)doomed_seq);

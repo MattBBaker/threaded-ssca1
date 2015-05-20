@@ -1,9 +1,24 @@
 #valid compilers: gcc; pgcc, pathcc
 #tested with gcc 4.3.3; pgi 8.0.6; pathscale 3.2
-COMPILER=gcc
+COMPILER=sgi
 
 #comment out this line to turn off debugging code
-#DEBUG=1
+DEBUG=1
+
+ifeq ($(COMPILER), sgi)
+        CC=cc
+        COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_SHMEM -DSGI_SHMEM
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
+        DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
+	EXTRA_LIBS=-lsma -lmpi
+endif
+
+ifeq ($(COMPILER), cray)
+        CC=cc
+        COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_SHMEM
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
+        DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
+endif
 
 ifeq ($(COMPILER), pgi)
 	CC=pgcc
@@ -52,7 +67,7 @@ COMMON_OBJS=parameters.o gen_sim_matrix.o gen_scal_data.o pairwise_align.o glibc
 MAIN_OBJS=main.o
 
 all: $(MAIN_OBJS) $(COMMON_OBJS)
-	$(LD) $(MAIN_OBJS) $(COMMON_OBJS) $(CFLAGS) $(LDFLAGS) -o ssca1 $(LIBS)
+	$(LD) $(MAIN_OBJS) $(COMMON_OBJS) $(CFLAGS) $(LDFLAGS) -o ssca1 $(LIBS) $(EXTRA_LIBS)
 
 clean:
 	rm -f $(COMMON_OBJS) $(TEST_OBJS) $(MAIN_OBJS) *~ core.* ssca1 ssca1-test
