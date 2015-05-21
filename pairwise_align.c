@@ -138,8 +138,8 @@ void release_good_match(good_match_t *doomed)
   free(doomed->bestScores);
   for(int idx=0; idx<doomed->bestLength; idx++)
   {
-    free_seq(doomed->bestSeqs[idx].main);
-    free_seq(doomed->bestSeqs[idx].match);
+    free_local_seq(doomed->bestSeqs[idx].main);
+    free_local_seq(doomed->bestSeqs[idx].match);
   }
   free(doomed->bestSeqs);
   free(doomed);
@@ -174,6 +174,16 @@ static gap_matrix_t *alloc_gap_matrix(index_t matrix_length){
   assert(new_alloc->scores != NULL);
   touch_memory(new_alloc->scores, sizeof(score_t)*2*new_alloc->local_length);
   return new_alloc;
+}
+
+static void free_score_matrix(score_matrix_t *doomed){
+  shfree(doomed->scores);
+  free(doomed);
+}
+
+static void free_gap_matrix(gap_matrix_t *doomed){
+  shfree(doomed->scores);
+  free(doomed);
 }
 
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
@@ -212,47 +222,62 @@ static void assign_gap(score_matrix_t *A, index_t m, index_t n, score_t new_valu
   shmem_short_put(&(A->scores[index2d(m%2,local_index,A->length)]), &new_value, 1, target_pe);
 }
 
+long collect_pSync[_SHMEM_REDUCE_SYNC_SIZE];
+int collect_pWrk[_SHMEM_REDUCE_MIN_WRKDATA_SIZE];
+
 static void collect_best_results(current_ends_t **good_ends, int max_reports, int max_threads, good_match_t *answer){
-  index_t *index_array;
-  score_t *sort_array;
-  int thread_idx, entry;
   index_t copied=0;
   int max_values=0;
+  current_ends_t collected_ends, current_end;
 
+  if(rank != 0) return;
+  /*
+  if(rank == 0){
+    printf("Rank 0 ready to debug on pid=%i\n", getpid());
+    int gogogo=0;
+    while(gogogo==0){}
+  }
+  */
   memset(answer->goodEnds[0], 0, sizeof(index_t)*max_reports);
   memset(answer->goodEnds[1], 0, sizeof(index_t)*max_reports);
   memset(answer->goodScores, 0, sizeof(score_t)*max_reports);
 
-  index_array = (index_t*)malloc(good_ends[0]->size * sizeof(index_t) * max_threads);
-  sort_array = (score_t*)malloc(good_ends[0]->size * sizeof(score_t) * max_threads);
+  collected_ends.goodScores = malloc(sizeof(score_t)*good_ends[0]->size*num_nodes);
+  collected_ends.goodEnds[0] = malloc(sizeof(index_t)*good_ends[0]->size*num_nodes);
+  collected_ends.goodEnds[1] = malloc(sizeof(index_t)*good_ends[0]->size*num_nodes);
 
-  memset(sort_array, 0, sizeof(score_t)*good_ends[0]->size * max_threads);
-  memset(index_array, 0, sizeof(index_t)*good_ends[0]->size * max_threads);
-
-  for(int idx=0; idx < max_threads; idx++) {
-    memcpy(sort_array+copied, good_ends[idx]->goodScores, good_ends[idx]->report * sizeof(score_t));
-    copied += good_ends[idx]->report;
-  }
-  index_sort(sort_array, index_array, copied);
-
-  max_values=copied;
-
-  if(max_values > max_reports) max_values = max_reports;
-
-  for(int idx=0; idx < max_values; idx++) {
-    entry = index_array[copied-(idx+1)];
-    thread_idx = 0;
-    while( entry >= good_ends[thread_idx]->report ) {
-      entry -= good_ends[thread_idx]->report;
-      thread_idx++;
-    } 
-    answer->goodScores[idx] = good_ends[thread_idx]->goodScores[entry];
-    answer->goodEnds[0][idx] = good_ends[thread_idx]->goodEnds[0][entry];
-    answer->goodEnds[1][idx] = good_ends[thread_idx]->goodEnds[1][entry];
+  for(int idx=0; idx < num_nodes; idx++){
+    shmem_getmem(&current_end, good_ends[0], sizeof(current_ends_t), idx);
+    shmem_short_get(&(collected_ends.goodScores[copied]), good_ends[0]->goodScores, current_end.report, idx);
+    shmem_long_get(&(collected_ends.goodEnds[0][copied]), good_ends[0]->goodEnds[0], current_end.report, idx);
+    shmem_long_get(&(collected_ends.goodEnds[1][copied]), good_ends[0]->goodEnds[1], current_end.report, idx);
+    copied += current_end.report;
   }
 
-  free(sort_array);
-  free(index_array);
+  sort_ends_t *sorted_list = malloc(sizeof(sort_ends_t)*copied);
+
+  for(int idx=0; idx < copied; idx++){
+    sorted_list[idx].score = collected_ends.goodScores[idx];
+    sorted_list[idx].main_end = collected_ends.goodEnds[0][idx];
+    sorted_list[idx].match_end = collected_ends.goodEnds[1][idx];
+  }
+
+  ends_sort(sorted_list, copied);
+
+  if(copied > max_reports){
+    max_values = max_reports;
+  } else {
+    max_values = copied;
+  }
+
+  for(int idx=0; idx < max_values; idx++){
+    answer->goodScores[idx] = sorted_list[idx].score;
+    answer->goodEnds[0][idx] = sorted_list[idx].main_end;
+    answer->goodEnds[1][idx] = sorted_list[idx].match_end;
+  }
+
+  printf("Collect frees\n");
+  free(sorted_list);
 
   answer->numReports = max_values;
 }
@@ -293,12 +318,12 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
 #endif
   for(int jdx=0; jdx < max_threads; jdx++) {
     int idx = omp_get_thread_num();
-    good_ends[idx] = (current_ends_t *)malloc(sizeof(current_ends_t));
+    good_ends[idx] = (current_ends_t *)shmalloc(sizeof(current_ends_t));
     good_ends[idx]->size = sortReports;
     good_ends[idx]->report = 0;
-    good_ends[idx]->goodScores = (score_t *)malloc(sizeof(score_t)*sortReports);
-    good_ends[idx]->goodEnds[0] = (index_t *)malloc(sizeof(index_t)*sortReports);
-    good_ends[idx]->goodEnds[1] = (index_t *)malloc(sizeof(index_t)*sortReports);
+    good_ends[idx]->goodScores = (score_t *)shmalloc(sizeof(score_t)*sortReports);
+    good_ends[idx]->goodEnds[0] = (index_t *)shmalloc(sizeof(index_t)*sortReports);
+    good_ends[idx]->goodEnds[1] = (index_t *)shmalloc(sizeof(index_t)*sortReports);
     good_ends[idx]->min_score = minScore;
   }
 
@@ -314,13 +339,18 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   codon_t main_codon;
   codon_t match_codon;
 
+  index_t local_main_start = seq_data->main->local_size * rank;
+  index_t local_main_end = seq_data->main->local_size * (rank+1) - 1;
+
+  /*
   if(rank == 0){
     printf("Ready to debug on PID=%i\n", getpid());
     int gogogo=0;
     while(gogogo==0){}
   }
-
+  */
   //First iteration, done by hand. Basically idx=0 in the big loop
+  if(rank == 0){
   main_codon = fetch_from_seq(main_seq,0);
   match_codon = fetch_from_seq(match_seq,0);
 
@@ -357,11 +387,15 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   cmp_b = G - gapFirst;
   assign_gap(main_gap_matrix,1,1,-gapFirst > cmp_b ? -gapFirst : cmp_b);
   assign_gap(match_gap_matrix,1,1,cmp_a > cmp_b ? cmp_a : cmp_b);
-
+  }
   for(index_t idx=2; idx < seq_data->match->length * 2 - 1; idx++) {
+    shmem_barrier_all();
+
     score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
     score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
+
     if(idx < seq_data->match->length) {
+      if(rank == 0){
       m = 0;
       n = idx;
       main_codon = fetch_from_seq(main_seq,m);
@@ -380,7 +414,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_a = F - gapExtend;
       cmp_b = G - gapFirst;
       assign_gap(match_gap_matrix,idx,n,cmp_a > cmp_b ? cmp_a : cmp_b);
-      score_start = score_start+1;
 
       m = idx;
       n = 0;
@@ -400,11 +433,36 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_a = E - gapExtend;
       cmp_b = G - gapFirst;
       assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
+      }
+      score_start++;
       score_end = score_end - 1;
     }
 
-    next_main = fetch_from_seq(main_seq,score_start);
-    next_match = fetch_from_seq(match_seq,idx - score_start);
+    index_t local_start, local_end;
+
+    if(score_end < local_main_start && score_start > local_main_end){
+
+      local_start = 1;
+      local_end = 0;
+
+    } else {
+
+      if(local_main_start > score_start){
+        local_start = local_main_start;
+      } else {
+        local_start = score_start;
+      }
+
+      if(score_end > local_main_end){
+        local_end = local_main_end;
+      } else {
+        local_end = score_end;
+      }
+
+      next_main = fetch_from_seq(main_seq,local_start);
+      next_match = fetch_from_seq(match_seq,idx - score_start);
+    }
+
 
     //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
 #if 0
@@ -412,7 +470,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
 #pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b,next_main,next_match) //schedule(static) //firstprivate(idx,main_len,match_len,score_end) schedule(static)
 #endif
 #endif
-    for(index_t antidiagonal = score_start; antidiagonal <= score_end; antidiagonal++) {
+    for(index_t antidiagonal = local_start; antidiagonal <= local_end; antidiagonal++) {
       m = antidiagonal;
       n = idx - m;
 
@@ -461,19 +519,40 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   answer->bestScores = NULL;
 
   collect_best_results(good_ends, maxReports, max_threads, answer);
-
-  free(score_matrix);
-  free(main_gap_matrix);
-  free(match_gap_matrix);
+  /*
+  printf("Starting frees\n");
+  free_score_matrix(score_matrix);
+  printf("0\n");
+  fflush(stdout);
+  free_gap_matrix(main_gap_matrix);
+  printf("1\n");
+  fflush(stdout);
+  free_gap_matrix(match_gap_matrix);
+  printf("2\n");
+  fflush(stdout);
 
   for(int idx=0; idx < max_threads; idx++) {
-    free(good_ends[idx]->goodScores);
-    free(good_ends[idx]->goodEnds[0]);
-    free(good_ends[idx]->goodEnds[1]);
-    free(good_ends[idx]);
+    printf("A %i\n", idx);
+    fflush(stdout);
+    shfree(good_ends[idx]->goodScores);
+    printf("B %i\n", idx);
+    fflush(stdout);
+    shfree(good_ends[idx]->goodEnds[0]);
+    printf("C %i\n", idx);
+    fflush(stdout);
+    shfree(good_ends[idx]->goodEnds[1]);
+    printf("D %i\n", idx);
+    fflush(stdout);
+    shfree(good_ends[idx]);
+    printf("E %i\n", idx);
+    fflush(stdout);
   }
 
+  printf("3\n");
+  fflush(stdout);
   free(good_ends);
-
+  printf("4\n");
+  fflush(stdout);
+  */
   return answer;
 }

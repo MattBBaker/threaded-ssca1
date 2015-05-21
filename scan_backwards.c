@@ -104,8 +104,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
   {
     rs[0] = i + 1;
     rs[1] = j + 1;
-    sequence->main = alloc_seq(depth);
-    sequence->match = alloc_seq(depth);
+    sequence->main = alloc_local_seq(depth);
+    sequence->match = alloc_local_seq(depth);
     return;
   }
 
@@ -120,8 +120,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     rs[1] = -1;
   }
 
-  Ci = A->seqData->main->sequence[ei-i];
-  Cj = A->seqData->match->sequence[ej-j];
+  Ci = fetch_from_seq(A->seqData->main,ei-i);
+  Cj =fetch_from_seq(A->seqData->match,ej-j);
 
   if(dir & 4)
   {
@@ -191,8 +191,10 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   index_t ei = A->goodEnds[0][report];
   index_t ej = A->goodEnds[1][report];
 
-  codon_t *mainSeq = A->seqData->main->sequence;
-  codon_t *matchSeq = A->seqData->match->sequence;
+  //codon_t *mainSeq = A->seqData->main->sequence;
+  //codon_t *matchSeq = A->seqData->match->sequence;
+  seq_t *main_seq = A->seqData->main;
+  seq_t *match_seq = A->seqData->match;
   int gapExtend = A->simMatrix->gapExtend;
   int gapFirst = A->simMatrix->gapStart + A->simMatrix->gapExtend;        // total penalty for first codon in gap
 
@@ -225,7 +227,7 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   V[0][m] = INT_MIN + gapFirst;
   V[1][m] = INT_MIN + gapFirst;
 
-  s = A->simMatrix->similarity[mainSeq[ei]][matchSeq[ej]];
+  s = A->simMatrix->similarity[fetch_from_seq(main_seq,ei)][fetch_from_seq(match_seq,ej)];
 
   //special case for the first point
   if(s==goal) return;
@@ -249,7 +251,7 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
 
     while(dj <= lj && di > 0 && e < sizeT && f < sizeT)
     {
-      G = A->simMatrix->similarity[mainSeq[di]][matchSeq[dj]] + V[v][f];
+      G = A->simMatrix->similarity[fetch_from_seq(main_seq,di)][fetch_from_seq(match_seq,dj)] + V[v][f];
       // find the very best weight ending with this pair 
       compare_a = E[e] > F[f] ? E[e] : F[f];
       s = G > compare_a ? G : compare_a;

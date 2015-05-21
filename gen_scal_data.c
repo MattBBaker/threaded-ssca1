@@ -56,7 +56,6 @@ void create_sequence(seq_t *sequence, char validations[][32], int num_validation
   index_t total_length = sequence->length;
   index_t end;
   index_t *indexes = gen_indexes(num_validations, total_length-32, 32);
-  codon_t temp;
 
   for(index_t idx=0; idx < sequence->local_size; idx++) {
     sequence->sequence[idx] = rand()%64;
@@ -93,8 +92,8 @@ seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t mat
   index_t main_size_with_validation = mainLen + validation_size;
   index_t match_size_with_validation = mainLen + validation_size;
 
-  new_scal_data->main = alloc_seq(main_size_with_validation);
-  new_scal_data->match = alloc_seq(match_size_with_validation);
+  new_scal_data->main = alloc_global_seq(main_size_with_validation);
+  new_scal_data->match = alloc_global_seq(match_size_with_validation);
 
   seq_t *gen_sequences[2] = {new_scal_data->main, new_scal_data->match};
   seed_rng(rank + 1);
@@ -116,7 +115,7 @@ seq_data_t *gen_scal_data( sim_matrix_t *simMatrix, index_t mainLen, index_t mat
 }
 
 void release_scal_data(seq_data_t *doomed_seq) {
-  free_seq(doomed_seq->main);
-  free_seq(doomed_seq->match);
+  free_global_seq(doomed_seq->main);
+  free_global_seq(doomed_seq->match);
   free((void *)doomed_seq);
 }

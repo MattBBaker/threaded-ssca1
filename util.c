@@ -33,25 +33,42 @@ void extend_seq(seq_t *extended, index_t extend_size){
   extended->backing_memory += extend_size;
 }
 
-seq_t *alloc_seq(index_t size){
+seq_t *alloc_global_seq(index_t size){
   seq_t *new = (seq_t*)shmalloc(sizeof(seq_t));
-  new->length = size;
   new->local_size = size / num_nodes;
+  new->length = new->local_size * num_nodes;
   new->backing_memory = new->local_size;
   new->sequence = (codon_t*)shmalloc(sizeof(codon_t)*new->local_size);
-  printf("Seq alloc size %u\n", new->local_size);
   if(new->sequence == NULL){
     printf("Shmalloc error\n");
     abort();
   }
-  fflush(stdout);
   return new;
 }
 
-void free_seq(seq_t *doomed){
+void free_global_seq(seq_t *doomed){
   if(doomed == NULL)return;
   shfree(doomed->sequence);
   shfree(doomed);
+}
+
+seq_t *alloc_local_seq(index_t size){
+  seq_t *new = (seq_t*)malloc(sizeof(seq_t));
+  new->local_size = size;
+  new->length = size;
+  new->backing_memory = size;
+  new->sequence = (codon_t*)malloc(sizeof(codon_t)*new->local_size);
+  if(new->sequence == NULL){
+    printf("malloc error\n");
+    abort();
+  }
+  return new;
+}
+
+void free_local_seq(seq_t *doomed){
+  if(doomed == NULL)return;
+  free(doomed->sequence);
+  free(doomed);
 }
 
 void touch_memory(void *mem, size_t size) {

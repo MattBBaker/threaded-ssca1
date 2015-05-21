@@ -126,8 +126,6 @@ int main(int argc, char **argv)
   good_match_t *S[global_parameters.K2_MAX_REPORTS];
   memset(S, 0, sizeof(good_match_t *)*global_parameters.K2_MAX_REPORTS);
 
-  printf("HPCS SSCA #1 Bioinformatics Sequence Alignment Executable Specification:\nRunning...\n");
-
   if(global_parameters.ENABLE_VERIF || global_parameters.CONSTANT_RNG)
   {
     printf("\n\tVerification run, using constant seed for RNG\n");
@@ -142,41 +140,55 @@ int main(int argc, char **argv)
     random_seed += get_dev_rand();
   }
 
-  printf("Using seed %u\n", random_seed);
+  if(rank == 0){
+  printf("HPCS SSCA #1 Bioinformatics Sequence Alignment Executable Specification:\nRunning...\n");
 
+  printf("Using seed %u\n", random_seed);
+  }
   distribute_rng_seed(random_seed);
 
-  gettimeofday(&start_time, NULL);
+  if(rank == 0){
+    printf("\nScalable Data Generator - genScalData() beginning execution...\n");
+  }
 
-  printf("\nScalable Data Generator - genScalData() beginning execution...\n");
-  sim_matrix = gen_sim_matrix(global_parameters.SIM_EXACT, global_parameters.SIM_SIMILAR, global_parameters.SIM_DISSIMILAR, global_parameters.GAP_START, global_parameters.GAP_EXTEND, global_parameters.MATCH_LIMIT);
   /*
   int gogogo=0;
   printf("Ready to debug on pid=%i\n", getpid());
   while(gogogo == 0){
   }
+  shmem_barrier_all();
   */
+
+  gettimeofday(&start_time, NULL);
+
+  sim_matrix = gen_sim_matrix(global_parameters.SIM_EXACT, global_parameters.SIM_SIMILAR, global_parameters.SIM_DISSIMILAR, global_parameters.GAP_START, global_parameters.GAP_EXTEND, global_parameters.MATCH_LIMIT);
+
   seq_data = gen_scal_data(sim_matrix, global_parameters.MAIN_SEQ_LENGTH, global_parameters.MATCH_SEQ_LENGTH, global_parameters.CONSTANT_RNG);
 
   display_elapsed(&start_time);
 
-  if(global_parameters.ENABLE_VERIF)
+  if(global_parameters.ENABLE_VERIF && rank == 0)
   {
     verifyData(sim_matrix, seq_data);
   }
 
   /* Kernel 1 run */
 
+  if(rank == 0){
   printf("\nBegining Kernel 1 execution.\n");
 
   gettimeofday(&start_time, NULL);
+  }
 
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
 
+  if(rank == 0){
   display_elapsed(&start_time);
+  }
 
   /* Kernel 2 run */
 
+  if(rank == 0){
   printf("\nBegining Kernel 2 execution.\n");
 
   gettimeofday(&start_time, NULL);
@@ -189,7 +201,7 @@ int main(int argc, char **argv)
   {
     verify_alignment(A, global_parameters.K2_DISPLAY);
   }
-
+  }
   release_good_match(A);
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);

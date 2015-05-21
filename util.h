@@ -10,27 +10,30 @@
 #include <shmem.h>
 #endif
 
-static inline int global_index_to_rank(seq_t *in, index_t codon_index){
+static inline int global_index_to_rank(const seq_t *in, const index_t codon_index){
   return codon_index / in->local_size;
 }
 
-static inline int global_index_to_local_index(seq_t *in, index_t codon_index){
+static inline int global_index_to_local_index(const seq_t *in, const index_t codon_index){
   return codon_index % in->local_size;
 }
 
-codon_t _fetch_temp;
+short _fetch_temp;
 
-static inline codon_t fetch_from_seq(const seq_t *in, index_t codon_index){
+static inline codon_t fetch_from_seq(const seq_t *in, index_t const codon_index){
   int target_pe = global_index_to_rank(in,codon_index);
   int local_index = global_index_to_local_index(in,codon_index);
-  shmem_short_get(&_fetch_temp, &(in->sequence[local_index]), 1, target_pe);
+  short *typed_seq = (short *)in->sequence;
+  shmem_short_get(&_fetch_temp, &(typed_seq[local_index]), 1, target_pe);
   return _fetch_temp;
 }
 
-static inline void write_to_seq(const seq_t *in, index_t codon_index, codon_t data){
+static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
   int target_pe = global_index_to_rank(in,codon_index);
   int local_index = global_index_to_local_index(in,codon_index);
-  shmem_short_put(&(in->sequence[local_index]), &data, 1, target_pe);
+  short *typed_seq = (short *)in->sequence;
+  short typed_data = (short)data;
+  shmem_short_put(&(typed_seq[local_index]), &typed_data, 1, target_pe);
 }
 
 void distribute_rng_seed(unsigned int new_seed);
@@ -40,8 +43,9 @@ index_t scrub_hyphens(good_match_t *A, seq_t *dest, seq_t *source, index_t lengt
 void assemble_acid_chain(good_match_t *A, char *result, seq_t *chain, index_t length);
 void assemble_codon_chain(good_match_t *A, char *result, seq_t *chain, index_t length);
 score_t simple_score(good_match_t *A, seq_t *main, seq_t *match);
-seq_t *alloc_seq(index_t seq_size);
-void extend_seq(seq_t *extended, index_t extend_size);
-void free_seq(seq_t *doomed);
+seq_t *alloc_global_seq(index_t seq_size);
+seq_t *alloc_local_seq(index_t seq_size);
+void free_global_seq(seq_t *doomed);
+void free_local_seq(seq_t *doomed);
 
 #endif
