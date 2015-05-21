@@ -1,6 +1,6 @@
 #valid compilers: gcc; pgcc, pathcc
 #tested with gcc 4.3.3; pgi 8.0.6; pathscale 3.2
-COMPILER=cray
+COMPILER=sgi
 
 #comment out this line to turn off debugging code
 DEBUG=1

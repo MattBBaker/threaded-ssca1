@@ -158,7 +158,10 @@ static score_matrix_t *alloc_score_matrix(index_t matrix_length){
   score_matrix_t *new_alloc = (score_matrix_t *)malloc(sizeof(score_matrix_t));
   assert(new_alloc != NULL);
   new_alloc->length = matrix_length;
-  new_alloc->local_length = matrix_length / num_nodes;
+  new_alloc->local_length = (matrix_length / num_nodes);
+
+  printf("gap length=%i local=%i\n",  new_alloc->length,  new_alloc->local_length);
+
   new_alloc->scores = (score_t *)shmalloc(sizeof(score_t)*3*new_alloc->local_length);
   assert(new_alloc->scores != NULL);
   touch_memory(new_alloc->scores, sizeof(score_t)*3*new_alloc->local_length);
@@ -169,7 +172,10 @@ static gap_matrix_t *alloc_gap_matrix(index_t matrix_length){
   gap_matrix_t *new_alloc = (gap_matrix_t *)malloc(sizeof(score_matrix_t));
   assert(new_alloc != NULL);
   new_alloc->length = matrix_length;
-  new_alloc->local_length = matrix_length / num_nodes;
+  new_alloc->local_length = (matrix_length / num_nodes);
+
+  printf("gap length=%i local=%i\n",  new_alloc->length,  new_alloc->local_length);
+
   new_alloc->scores = (score_t *)shmalloc(sizeof(score_t)*2*new_alloc->local_length);
   assert(new_alloc->scores != NULL);
   touch_memory(new_alloc->scores, sizeof(score_t)*2*new_alloc->local_length);
@@ -193,7 +199,7 @@ static score_t fetch_score(score_matrix_t *A, index_t m, index_t n){
   int local_index = n % A->local_length;
   static score_t temp_score;
 
-  shmem_short_get(&temp_score, &(A->scores[index2d(m%3,local_index,A->length)]), 1, target_pe);
+  shmem_short_get(&temp_score, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_pe);
 
   return temp_score;
 }
@@ -203,7 +209,7 @@ static score_t fetch_gap(gap_matrix_t *A, index_t m, index_t n){
   int local_index = n %A->local_length;
   static score_t temp_score;
 
-  shmem_short_get(&temp_score, &(A->scores[index2d(m%2,local_index,A->length)]), 1, target_pe);
+  shmem_short_get(&temp_score, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_pe);
 
   return temp_score;
 }
@@ -212,14 +218,14 @@ static void assign_score(score_matrix_t *A, index_t m, index_t n, score_t new_va
   int target_pe = n / A->local_length;
   int local_index = n %A->local_length;
 
-  shmem_short_put(&(A->scores[index2d(m%3,local_index,A->length)]), &new_value, 1, target_pe);
+  shmem_short_put(&(A->scores[index2d(m%3,local_index,A->local_length)]), &new_value, 1, target_pe);
 }
 
 static void assign_gap(score_matrix_t *A, index_t m, index_t n, score_t new_value){
   int target_pe = n / A->local_length;
-  int local_index = n %A->local_length;
+  int local_index = n % A->local_length;
 
-  shmem_short_put(&(A->scores[index2d(m%2,local_index,A->length)]), &new_value, 1, target_pe);
+  shmem_short_put(&(A->scores[index2d(m%2,local_index,A->local_length)]), &new_value, 1, target_pe);
 }
 
 long collect_pSync[_SHMEM_REDUCE_SYNC_SIZE];
@@ -519,40 +525,19 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   answer->bestScores = NULL;
 
   collect_best_results(good_ends, maxReports, max_threads, answer);
-  /*
-  printf("Starting frees\n");
+
   free_score_matrix(score_matrix);
-  printf("0\n");
-  fflush(stdout);
   free_gap_matrix(main_gap_matrix);
-  printf("1\n");
-  fflush(stdout);
   free_gap_matrix(match_gap_matrix);
-  printf("2\n");
-  fflush(stdout);
 
   for(int idx=0; idx < max_threads; idx++) {
-    printf("A %i\n", idx);
-    fflush(stdout);
     shfree(good_ends[idx]->goodScores);
-    printf("B %i\n", idx);
-    fflush(stdout);
     shfree(good_ends[idx]->goodEnds[0]);
-    printf("C %i\n", idx);
-    fflush(stdout);
     shfree(good_ends[idx]->goodEnds[1]);
-    printf("D %i\n", idx);
-    fflush(stdout);
     shfree(good_ends[idx]);
-    printf("E %i\n", idx);
-    fflush(stdout);
   }
 
-  printf("3\n");
-  fflush(stdout);
   free(good_ends);
-  printf("4\n");
-  fflush(stdout);
-  */
+
   return answer;
 }

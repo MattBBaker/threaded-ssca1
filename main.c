@@ -202,7 +202,7 @@ int main(int argc, char **argv)
     verify_alignment(A, global_parameters.K2_DISPLAY);
   }
   }
-  release_good_match(A);
+  //release_good_match(A);
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);
 
