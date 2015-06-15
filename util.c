@@ -15,6 +15,7 @@ void distribute_rng_seed(unsigned int new_seed){
   for(int idx=0; idx < _SHMEM_BCAST_SYNC_SIZE; idx++){
     seed_psync[idx] = _SHMEM_SYNC_VALUE;
   }
+  shmem_barrier_all();
   shmem_broadcast32(&random_seed,&new_seed,1,0,0,0,num_nodes,seed_psync);
 }
 

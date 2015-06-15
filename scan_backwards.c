@@ -88,8 +88,7 @@ int verify_alignment(good_match_t *A, int maxDisplay)
 
   /* Matlab allows for a = [1 2] and b = [0 a] and b will be [0 1 2].  Obviously we can't have that in C. */
   void tracepath(good_match_t *A, int sizeT, int *T, int ei, int ej, int i, int j, int dir, int rs[2], seq_data_t *sequence, int depth) {
-  int Ci;
-  int Cj;
+    codon_t Ci, Cj;
 
   /* debug code */
   /*
@@ -120,8 +119,8 @@ int verify_alignment(good_match_t *A, int maxDisplay)
     rs[1] = -1;
   }
 
-  Ci = fetch_from_seq(A->seqData->main,ei-i);
-  Cj =fetch_from_seq(A->seqData->match,ej-j);
+  fetch_from_seq(A->seqData->main,ei-i,&Ci);
+  fetch_from_seq(A->seqData->match,ej-j,&Cj);
 
   if(dir & 4)
   {
@@ -205,6 +204,7 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   int s, fj, fi, lj, v, dj, di, e, f, G;
   int compare_a, compare_b;
   int rs[2];
+  codon_t main_codon, match_codon;
 
   int sizeT = 2 * (A->simMatrix->matchLimit > A->seqData->max_validation ? A->simMatrix->matchLimit : A->seqData->max_validation);
   int *T = malloc(sizeof(int) * sizeT * sizeT);
@@ -227,7 +227,10 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
   V[0][m] = INT_MIN + gapFirst;
   V[1][m] = INT_MIN + gapFirst;
 
-  s = A->simMatrix->similarity[fetch_from_seq(main_seq,ei)][fetch_from_seq(match_seq,ej)];
+  fetch_from_seq(main_seq,ei,&main_codon);
+  fetch_from_seq(match_seq,ej,&match_codon);
+
+  s = A->simMatrix->similarity[main_codon][match_codon];
 
   //special case for the first point
   if(s==goal) return;
@@ -251,7 +254,9 @@ void doScan(good_match_t *A, int *bestR, int minSeparation, int report) {
 
     while(dj <= lj && di > 0 && e < sizeT && f < sizeT)
     {
-      G = A->simMatrix->similarity[fetch_from_seq(main_seq,di)][fetch_from_seq(match_seq,dj)] + V[v][f];
+      fetch_from_seq(main_seq,di,&main_codon);
+      fetch_from_seq(match_seq,dj,&match_codon);
+      G = A->simMatrix->similarity[main_codon][match_codon] + V[v][f];
       // find the very best weight ending with this pair 
       compare_a = E[e] > F[f] ? E[e] : F[f];
       s = G > compare_a ? G : compare_a;

@@ -107,9 +107,17 @@ int main(int argc, char **argv)
   start_pes(0);
   num_nodes=shmem_n_pes();
   rank=shmem_my_pe();
+  if(rank == 0)
+    printf("Running with OpenSHMEM, npes = %i\n", num_nodes);
 #else
   num_nodes=1;
   rank=0;
+#endif
+
+#ifdef USE_PREFETCH
+  if(rank == 0) printf("Using OpenSHMEM prefetching\n");
+#else
+  if(rank == 0) printf("Disabling OpenSHMEM prefetching\n");
 #endif
 
   init_parameters(&global_parameters);
@@ -128,7 +136,7 @@ int main(int argc, char **argv)
 
   if(global_parameters.ENABLE_VERIF || global_parameters.CONSTANT_RNG)
   {
-    printf("\n\tVerification run, using constant seed for RNG\n");
+    //printf("\n\tVerification run, using constant seed for RNG\n");
     // interesting values that have uncovered bugs in the past,
     // 2613174141 -- segfault caused by insert_validation producting two identical values
     // -550696422 -- segfault caused by the RNG producing 0.
@@ -138,16 +146,14 @@ int main(int argc, char **argv)
   {
     random_seed = (unsigned int)time(NULL); /* casting from time_t to unsigned int we can lose precision... no big deal here */
     random_seed += get_dev_rand();
+    distribute_rng_seed(random_seed);
   }
 
   if(rank == 0){
-  printf("HPCS SSCA #1 Bioinformatics Sequence Alignment Executable Specification:\nRunning...\n");
+    printf("HPCS SSCA #1 Bioinformatics Sequence Alignment Executable Specification:\nRunning...\n");
 
-  printf("Using seed %u\n", random_seed);
-  }
-  distribute_rng_seed(random_seed);
+    printf("Using seed %u\n", random_seed);
 
-  if(rank == 0){
     printf("\nScalable Data Generator - genScalData() beginning execution...\n");
   }
 
@@ -165,11 +171,13 @@ int main(int argc, char **argv)
 
   seq_data = gen_scal_data(sim_matrix, global_parameters.MAIN_SEQ_LENGTH, global_parameters.MATCH_SEQ_LENGTH, global_parameters.CONSTANT_RNG);
 
-  display_elapsed(&start_time);
+  if(rank == 0){
+    display_elapsed(&start_time);
 
-  if(global_parameters.ENABLE_VERIF && rank == 0)
+  if(global_parameters.ENABLE_VERIF)
   {
     verifyData(sim_matrix, seq_data);
+  }
   }
 
   /* Kernel 1 run */

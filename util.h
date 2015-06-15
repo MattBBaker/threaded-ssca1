@@ -18,14 +18,18 @@ static inline int global_index_to_local_index(const seq_t *in, const index_t cod
   return codon_index % in->local_size;
 }
 
-short _fetch_temp;
-
-static inline codon_t fetch_from_seq(const seq_t *in, index_t const codon_index){
+static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
   int target_pe = global_index_to_rank(in,codon_index);
   int local_index = global_index_to_local_index(in,codon_index);
   short *typed_seq = (short *)in->sequence;
-  shmem_short_get(&_fetch_temp, &(typed_seq[local_index]), 1, target_pe);
-  return _fetch_temp;
+  shmem_short_get((short*)out, &(typed_seq[local_index]), 1, target_pe);
+}
+
+static inline void fetch_from_seq_nb(const seq_t *in, index_t const codon_index, codon_t *out){
+  int target_pe = global_index_to_rank(in,codon_index);
+  int local_index = global_index_to_local_index(in,codon_index);
+  short *typed_seq = (short *)in->sequence;
+  shmem_short_get_nb((short*)out, &(typed_seq[local_index]), 1, target_pe, NULL);
 }
 
 static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
@@ -34,6 +38,12 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
   short *typed_seq = (short *)in->sequence;
   short typed_data = (short)data;
   shmem_short_put(&(typed_seq[local_index]), &typed_data, 1, target_pe);
+}
+
+#define WAIT_SUCCESS 1
+static inline int nb_wait(){
+  shmem_quiet();
+  return WAIT_SUCCESS;
 }
 
 void distribute_rng_seed(unsigned int new_seed);
