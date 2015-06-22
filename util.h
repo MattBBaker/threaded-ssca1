@@ -3,6 +3,7 @@
 
 #include <pairwise_align.h>
 #include <types.h>
+#include <stdio.h>
 
 #ifdef USE_MPI3
 #include <mpi.h>
@@ -20,25 +21,25 @@ extern void *next_window_address;
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_GET(target, source, num_elems, rank)	MPI_Get(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window)
+#define SHORT_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window)
 #else
 #define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_GET_NB(target, source, num_elems, rank)	MPI_Get(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window) /* no non-blocking get available yet? */
+#define SHORT_GET_NB(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window) /* no non-blocking get available yet? */
 #else
 #define SHORT_GET_NB(target, source, num_elems, pe)	shmem_short_get_nb(target, source, num_elems, pe, NULL)
 #endif
 
 #ifdef USE_MPI3
-#define LONG_GET(target, source, num_elems, rank)	MPI_Get(source, num_elems, MPI_LONG, rank, (void *)target - window_base, num_elems, MPI_LONG, window)
+#define LONG_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window)
 #else
 #define LONG_GET(target, source, num_elems, pe)		shmem_long_get(target, source, num_elems, pe)
 #endif
 
 #ifdef USE_MPI3
-#define GETMEM(target, source, length, rank)		MPI_Get(source, length, MPI_BYTE, rank, (void *)target - window_base, length, MPI_BYTE, window)
+#define GETMEM(target, source, length, rank)		MPI_Get(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window)
 #else
 #define GETMEM(target, source, length, pe)		shmem_getmem(target, source, length, pe)
 #endif
@@ -50,7 +51,13 @@ extern void *next_window_address;
 #endif
 
 #ifdef USE_MPI3
-#define BARRIER_ALL()	MPI_Win_fence(0, window); MPI_Barrier(MPI_COMM_WORLD)
+#define QUIET()		MPI_Win_fence(0, window)
+#else
+#define QUIET()		shmem_quiet()
+#endif
+
+#ifdef USE_MPI3
+#define BARRIER_ALL()	QUIET(); MPI_Barrier(MPI_COMM_WORLD)
 #else
 #define BARRIER_ALL()	shmem_barrier_all()
 #endif
@@ -113,9 +120,9 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
 }
 
 #ifdef USE_MPI3
-#define WAIT_NB() MPI_Win_fence(0, window) /* no non-blocking available yet? */
+#define WAIT_NB() QUIET() /* no non-blocking available yet? */
 #else
-#define WAIT_NB() shmem_quiet()
+#define WAIT_NB() QUIET()
 #endif
 
 void distribute_rng_seed(unsigned int new_seed);
