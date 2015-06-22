@@ -209,7 +209,6 @@ int main(int argc, char **argv)
   
   MPI_Win_fence(0, window);
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
-  MPI_Win_fence(0, window);
 
   if(rank == 0){
   display_elapsed(&start_time);
@@ -222,9 +221,7 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
  
-  MPI_Win_fence(0, window);
   scanBackward(A, global_parameters.K2_MAX_REPORTS, global_parameters.K2_MIN_SEPARATION);
-  MPI_Win_fence(0, window);
 
   display_elapsed(&start_time);
 
