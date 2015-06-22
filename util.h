@@ -120,7 +120,7 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
 }
 
 #ifdef USE_MPI3
-#define WAIT_NB() QUIET() /* no non-blocking available yet? */
+#define WAIT_NB() /* no non-blocking available yet? */
 #else
 #define WAIT_NB() QUIET()
 #endif
