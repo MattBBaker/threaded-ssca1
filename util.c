@@ -1,22 +1,31 @@
+#include <stdlib.h>
 #include <util.h>
 #include <pairwise_align.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
 
 extern unsigned int random_seed;
 extern int num_nods;
 extern int rank;
+MPI_Comm world;
+MPI_Win window;
+void *window_base;
+size_t window_size;
+void *next_window_address;
 
+#ifdef USE_SHMEM
 long seed_psync[_SHMEM_BCAST_SYNC_SIZE];
+#endif
 
 void distribute_rng_seed(unsigned int new_seed){
+#ifdef USE_SHMEM
   for(int idx=0; idx < _SHMEM_BCAST_SYNC_SIZE; idx++){
     seed_psync[idx] = _SHMEM_SYNC_VALUE;
   }
   shmem_barrier_all();
   shmem_broadcast32(&random_seed,&new_seed,1,0,0,0,num_nodes,seed_psync);
+#endif
 }
 
 void seed_rng(int adjustment){
@@ -35,11 +44,11 @@ void extend_seq(seq_t *extended, index_t extend_size){
 }
 
 seq_t *alloc_global_seq(index_t size){
-  seq_t *new = (seq_t*)shmalloc(sizeof(seq_t));
+  seq_t *new = malloc(sizeof(seq_t));
   new->local_size = size / num_nodes;
   new->length = new->local_size * num_nodes;
   new->backing_memory = new->local_size;
-  new->sequence = (codon_t*)shmalloc(sizeof(codon_t)*new->local_size);
+  malloc_all(sizeof(codon_t)*new->local_size, (void **)&new->sequence);
   if(new->sequence == NULL){
     printf("Shmalloc error\n");
     abort();
@@ -49,8 +58,8 @@ seq_t *alloc_global_seq(index_t size){
 
 void free_global_seq(seq_t *doomed){
   if(doomed == NULL)return;
-  shfree(doomed->sequence);
-  shfree(doomed);
+  FREE_ALL(doomed->sequence);
+  FREE_ALL(doomed);
 }
 
 seq_t *alloc_local_seq(index_t size){

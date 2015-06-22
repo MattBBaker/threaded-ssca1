@@ -98,11 +98,29 @@ int main(int argc, char **argv)
   seq_data_t *seq_data;
   struct timeval start_time;
   good_match_t *A;
+#ifdef USE_MPI3
+  MPI_Info winfo;
+#endif
 
 #ifdef _OPENMP
   printf("Running with OpenMP\n");
 #endif
 
+#ifdef USE_MPI3
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &num_nodes);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Info_create(&winfo);
+  MPI_Info_set(winfo, "same_size", "true");
+  MPI_Info_set(winfo, "alloc_shm", "false");
+  window_size = 1000000;
+  window_base = malloc(window_size);
+  MPI_Win_create(window_base, window_size,  1, winfo, MPI_COMM_WORLD, &window);
+  MPI_Win_fence(0, window);
+  next_window_address = window_base;
+  MPI_Info_free(&winfo);
+  printf("Running with MPI-3, world size is %d\n", num_nodes);
+#else
 #ifdef USE_SHMEM
   start_pes(0);
   num_nodes=shmem_n_pes();
@@ -112,6 +130,7 @@ int main(int argc, char **argv)
 #else
   num_nodes=1;
   rank=0;
+#endif
 #endif
 
 #ifdef USE_PREFETCH
@@ -187,8 +206,10 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
   }
-
+  
+  MPI_Win_fence(0, window);
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
+  MPI_Win_fence(0, window);
 
   if(rank == 0){
   display_elapsed(&start_time);
@@ -201,7 +222,9 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
  
+  MPI_Win_fence(0, window);
   scanBackward(A, global_parameters.K2_MAX_REPORTS, global_parameters.K2_MIN_SEPARATION);
+  MPI_Win_fence(0, window);
 
   display_elapsed(&start_time);
 

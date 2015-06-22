@@ -1,6 +1,6 @@
 #valid compilers: gcc; pgcc, pathcc
 #tested with gcc 4.3.3; pgi 8.0.6; pathscale 3.2
-COMPILER=cray
+COMPILER=mpicc
 
 #comment out this line to turn off debugging code
 #DEBUG=1
@@ -46,6 +46,13 @@ ifeq ($(COMPILER), intel)
         COMMON_CFLAGS=-std=c99
         OPTIMIZED_CFLAGS=-fast -xhost
         DEBUG_CFLAGS=-O0 -g2
+endif
+
+ifeq ($(COMPILER), mpicc)
+	CC=cc
+	COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_MPI3
+	OPTIMIZED_CFLAGS=-g -O0 -pipe -frename-registers
+	DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 endif
 
 ifndef DEBUG

@@ -17,6 +17,7 @@ See file LICENSING for licensing information.
 #include <string.h>
 #include <util.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include <sys/time.h>
 
@@ -109,7 +110,6 @@ static void considerAdding(score_t score, int minSeparation, index_t main_index,
     free(sorted_array);
     free(best_index);
   }
-
   score_ends->goodEnds[0][score_ends->report] = main_index;
   score_ends->goodEnds[1][score_ends->report] = match_index;
   score_ends->goodScores[score_ends->report] = score;
@@ -161,7 +161,7 @@ static score_matrix_t *alloc_score_matrix(index_t matrix_length){
   new_alloc->length = matrix_length;
   new_alloc->local_length = (matrix_length / num_nodes);
 
-  new_alloc->scores = (score_t *)shmalloc(sizeof(score_t)*3*new_alloc->local_length);
+  malloc_all(sizeof(score_t)*3*new_alloc->local_length, (void **)&new_alloc->scores);
   assert(new_alloc->scores != NULL);
   touch_memory(new_alloc->scores, sizeof(score_t)*3*new_alloc->local_length);
   return new_alloc;
@@ -173,68 +173,70 @@ static gap_matrix_t *alloc_gap_matrix(index_t matrix_length){
   new_alloc->length = matrix_length;
   new_alloc->local_length = (matrix_length / num_nodes);
 
-  new_alloc->scores = (score_t *)shmalloc(sizeof(score_t)*2*new_alloc->local_length);
+  malloc_all(sizeof(score_t)*2*new_alloc->local_length, (void **)&new_alloc->scores);
   assert(new_alloc->scores != NULL);
   touch_memory(new_alloc->scores, sizeof(score_t)*2*new_alloc->local_length);
   return new_alloc;
 }
 
 static void free_score_matrix(score_matrix_t *doomed){
-  shfree(doomed->scores);
+  FREE_ALL(doomed->scores);
   free(doomed);
 }
 
 static void free_gap_matrix(gap_matrix_t *doomed){
-  shfree(doomed->scores);
+  FREE_ALL(doomed->scores);
   free(doomed);
 }
 
 #define index2d(x,y,stride) ((y) + ((x) * (stride)))
 
 static void fetch_score(score_matrix_t *A, index_t m, index_t n, score_t *in){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n % A->local_length;
 
-  shmem_short_get(in, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_pe);
+  SHORT_GET(in, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_ep);
 }
 
 static void fetch_gap(gap_matrix_t *A, index_t m, index_t n, score_t *in){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n %A->local_length;
 
-  shmem_short_get(in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_pe);
+  SHORT_GET(in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_ep);
 }
 
 static void fetch_score_nb(score_matrix_t *A, index_t m, index_t n, score_t *in){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n % A->local_length;
 
-  shmem_short_get_nb((short*)in, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_pe, NULL);
+  SHORT_GET_NB((short*)in, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_ep);
 }
 
 static void fetch_gap_nb(gap_matrix_t *A, index_t m, index_t n, score_t *in){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n %A->local_length;
 
-  shmem_short_get_nb((short*)in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_pe, NULL);
+  SHORT_GET_NB((short*)in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_ep);
 }
 
 static void assign_score(score_matrix_t *A, index_t m, index_t n, score_t new_value){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n %A->local_length;
 
-  shmem_short_put(&(A->scores[index2d(m%3,local_index,A->local_length)]), &new_value, 1, target_pe);
+  SHORT_PUT(&(A->scores[index2d(m%3,local_index,A->local_length)]), &new_value, 1, target_ep);
 }
 
 static void assign_gap(score_matrix_t *A, index_t m, index_t n, score_t new_value){
-  int target_pe = n / A->local_length;
+  int target_ep = n / A->local_length;
   int local_index = n % A->local_length;
 
-  shmem_short_put(&(A->scores[index2d(m%2,local_index,A->local_length)]), &new_value, 1, target_pe);
+  SHORT_PUT(&(A->scores[index2d(m%2,local_index,A->local_length)]), &new_value, 1, target_ep);
 }
 
+#ifdef USE_SHMEM
 long collect_pSync[_SHMEM_REDUCE_SYNC_SIZE];
 int collect_pWrk[_SHMEM_REDUCE_MIN_WRKDATA_SIZE];
+#endif
 
 static void collect_best_results(current_ends_t **good_ends, int max_reports, int max_threads, good_match_t *answer){
   index_t copied=0;
@@ -252,10 +254,10 @@ static void collect_best_results(current_ends_t **good_ends, int max_reports, in
   collected_ends.goodEnds[1] = malloc(sizeof(index_t)*good_ends[0]->size*num_nodes);
 
   for(int idx=0; idx < num_nodes; idx++){
-    shmem_getmem(&current_end, good_ends[0], sizeof(current_ends_t), idx);
-    shmem_short_get(&(collected_ends.goodScores[copied]), good_ends[0]->goodScores, current_end.report, idx);
-    shmem_long_get(&(collected_ends.goodEnds[0][copied]), good_ends[0]->goodEnds[0], current_end.report, idx);
-    shmem_long_get(&(collected_ends.goodEnds[1][copied]), good_ends[0]->goodEnds[1], current_end.report, idx);
+    GETMEM(&current_end, good_ends[0], sizeof(current_ends_t), idx);
+    SHORT_GET(&(collected_ends.goodScores[copied]), good_ends[0]->goodScores, current_end.report, idx);
+    LONG_GET(&(collected_ends.goodEnds[0][copied]), good_ends[0]->goodEnds[0], current_end.report, idx);
+    LONG_GET(&(collected_ends.goodEnds[1][copied]), good_ends[0]->goodEnds[1], current_end.report, idx);
     copied += current_end.report;
   }
 
@@ -323,12 +325,12 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
 #endif
   for(int jdx=0; jdx < max_threads; jdx++) {
     int idx = omp_get_thread_num();
-    good_ends[idx] = (current_ends_t *)shmalloc(sizeof(current_ends_t));
+    malloc_all(sizeof(current_ends_t), (void **)&good_ends[idx]);
     good_ends[idx]->size = sortReports;
     good_ends[idx]->report = 0;
-    good_ends[idx]->goodScores = (score_t *)shmalloc(sizeof(score_t)*sortReports);
-    good_ends[idx]->goodEnds[0] = (index_t *)shmalloc(sizeof(index_t)*sortReports);
-    good_ends[idx]->goodEnds[1] = (index_t *)shmalloc(sizeof(index_t)*sortReports);
+    malloc_all(sizeof(score_t)*sortReports, (void **)&good_ends[idx]->goodScores);
+    malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[0]);
+    malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[1]);
     good_ends[idx]->min_score = minScore;
   }
 
@@ -396,7 +398,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   }
 
   for(index_t idx=2; idx < seq_data->match->length * 2 - 1; idx++) {
-    shmem_barrier_all();
+    BARRIER_ALL();
 
     score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
     score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
@@ -509,7 +511,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       fetch_gap(main_gap_matrix, idx-1, local_start-1, &next_E);
     }
 
-
     //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
 #if 0
 #ifdef _OPENMP
@@ -556,7 +557,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
         if (m+1 == seq_data->main->length || n == 0) {
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
         } else {
-        shmem_quiet();
+        WAIT_NB();
 
         if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
@@ -580,7 +581,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_c = F - gapExtend;
 
 #ifdef USE_PREFETCH
-      shmem_quiet();
+      WAIT_NB();
 #endif
 
       assign_score(score_matrix,idx,m,new_score);
@@ -611,10 +612,10 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   free_gap_matrix(match_gap_matrix);
 
   for(int idx=0; idx < max_threads; idx++) {
-    shfree(good_ends[idx]->goodScores);
-    shfree(good_ends[idx]->goodEnds[0]);
-    shfree(good_ends[idx]->goodEnds[1]);
-    shfree(good_ends[idx]);
+    FREE_ALL(good_ends[idx]->goodScores);
+    FREE_ALL(good_ends[idx]->goodEnds[0]);
+    FREE_ALL(good_ends[idx]->goodEnds[1]);
+    FREE_ALL(good_ends[idx]);
   }
 
   free(good_ends);
