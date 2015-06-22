@@ -16,7 +16,7 @@ endif
 ifeq ($(COMPILER), cray)
         CC=cc
         COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_SHMEM
-        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -DUSE_PREFETCH
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers #-DUSE_PREFETCH
         DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 endif
 

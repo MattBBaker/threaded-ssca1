@@ -423,12 +423,16 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       */
 
       if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
-
+        if (m+1 == seq_data->main->length || n == 0) {
+          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        }
+        else {
         fetch_from_seq(main_seq, m+1, &next_main);
         fetch_from_seq(match_seq, n-1, &next_match);
 
         if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        }
         }
       }
 
@@ -456,12 +460,16 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       */
 
       if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
+        if (m+1 == seq_data->main->length || n == 0) {
+          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        } else {
 
         fetch_from_seq(main_seq, m+1, &next_main);
         fetch_from_seq(match_seq, n-1, &next_match);
 
         if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        }
         }
       }
 
@@ -545,16 +553,25 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
 
 #ifdef USE_PREFETCH
+        if (m+1 == seq_data->main->length || n == 0) {
+          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        } else {
         shmem_quiet();
 
         if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
         }
+        }
 #else
+
+        if (m+1 == seq_data->main->length || n == 0) {
+          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        } else {
         fetch_from_seq(main_seq, m+1, &next_main);
         fetch_from_seq(match_seq, n-1, &next_match);
         if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
           considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        }
         }
 #endif
       }
@@ -569,6 +586,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       assign_score(score_matrix,idx,m,new_score);
       assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
       assign_gap(match_gap_matrix, idx, n, cmp_c > cmp_b ? cmp_c : cmp_b);
+    
     }
   }
 
