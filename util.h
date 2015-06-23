@@ -22,8 +22,7 @@ extern MPI_Request request;
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_GET(target, source, num_elems, rank)	MPI_Rget(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window, &request); \
-							MPI_Wait(&request, MPI_STATUS_IGNORE)
+#define SHORT_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window); QUIET()
 #else
 #define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
 #endif
@@ -35,22 +34,19 @@ extern MPI_Request request;
 #endif
 
 #ifdef USE_MPI3
-#define LONG_GET(target, source, num_elems, rank)	MPI_Rget(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window, &request); \
-							MPI_Wait(&request, MPI_STATUS_IGNORE)
+#define LONG_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window); QUIET()
 #else
 #define LONG_GET(target, source, num_elems, pe)		shmem_long_get(target, source, num_elems, pe)
 #endif
 
 #ifdef USE_MPI3
-#define GETMEM(target, source, length, rank)		MPI_Rget(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window, &request); \
-							MPI_Wait(&request, MPI_STATUS_IGNORE)
+#define GETMEM(target, source, length, rank)		MPI_Get(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window); QUIET()
 #else
 #define GETMEM(target, source, length, pe)		shmem_getmem(target, source, length, pe)
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_PUT(target, source, num_elems, rank)	MPI_Rput(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window, &request); \
-							MPI_Wait(&request, MPI_STATUS_IGNORE)
+#define SHORT_PUT(target, source, num_elems, rank)	MPI_Put(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window); QUIET()
 #else
 #define SHORT_PUT(target, source, num_elems, pe)	shmem_short_put(target, source, num_elems, pe)
 #endif
