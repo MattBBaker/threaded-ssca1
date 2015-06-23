@@ -29,7 +29,7 @@ extern MPI_Request request;
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_GET_NB(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window) /* no non-blocking get available yet? */
+#define SHORT_GET_NB(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window)
 #else
 #define SHORT_GET_NB(target, source, num_elems, pe)	shmem_short_get_nb(target, source, num_elems, pe, NULL)
 #endif
@@ -125,7 +125,7 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
 }
 
 #ifdef USE_MPI3
-#define WAIT_NB() /* no non-blocking available yet? */
+#define WAIT_NB() QUIET()
 #else
 #define WAIT_NB() QUIET()
 #endif
