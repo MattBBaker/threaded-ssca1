@@ -206,8 +206,9 @@ int main(int argc, char **argv)
 
   gettimeofday(&start_time, NULL);
   }
-  
+#ifdef USE_MPI3  
   MPI_Win_fence(0, window);
+#endif
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
 
   if(rank == 0){

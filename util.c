@@ -8,11 +8,13 @@
 extern unsigned int random_seed;
 extern int num_nods;
 extern int rank;
+#ifdef USE_MPI3
 MPI_Comm world;
 MPI_Win window;
 void *window_base;
 size_t window_size;
 void *next_window_address;
+#endif
 
 #ifdef USE_SHMEM
 long seed_psync[_SHMEM_BCAST_SYNC_SIZE];
@@ -59,7 +61,7 @@ seq_t *alloc_global_seq(index_t size){
 void free_global_seq(seq_t *doomed){
   if(doomed == NULL)return;
   FREE_ALL(doomed->sequence);
-  FREE_ALL(doomed);
+  free(doomed);
 }
 
 seq_t *alloc_local_seq(index_t size){
