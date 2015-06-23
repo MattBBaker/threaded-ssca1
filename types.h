@@ -8,12 +8,10 @@ typedef uint64_t index_t;
 extern int num_nodes;
 extern int rank;
 
-#ifdef USE_SHMEM
-#define ssca1_distributed_malloc(x) shmalloc(x)
+#if defined(USE_SHMEM) || defined(USE_MPI3)
 typedef uint16_t codon_t;
 typedef int16_t score_t;
 #else
-#define ssca1_distributed_malloc(x) malloc(x)
 typedef int_fast8_t codon_t;
 typedef int_fast16_t score_t;
 #endif
