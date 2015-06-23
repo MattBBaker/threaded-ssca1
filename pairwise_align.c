@@ -605,6 +605,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   answer->bestSeqs = NULL;
   answer->bestScores = NULL;
 
+  BARRIER_ALL();
   collect_best_results(good_ends, maxReports, max_threads, answer);
 
   free_score_matrix(score_matrix);
