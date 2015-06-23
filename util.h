@@ -12,6 +12,7 @@ extern MPI_Win window;
 extern void *window_base;
 extern size_t window_size;
 extern void *next_window_address;
+extern MPI_Request request;
 #else
 #ifdef SGI_SHMEM
 #include <mpp/shmem.h>
@@ -21,7 +22,8 @@ extern void *next_window_address;
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window)
+#define SHORT_GET(target, source, num_elems, rank)	MPI_RGet(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window, &request); \
+							MPI_Wait(&request, MPI_STATUS_IGNORE)
 #else
 #define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
 #endif
@@ -33,19 +35,22 @@ extern void *next_window_address;
 #endif
 
 #ifdef USE_MPI3
-#define LONG_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window)
+#define LONG_GET(target, source, num_elems, rank)	MPI_RGet(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window, &request); \
+							MPI_Wait(&request, MPI_STATUS_IGNORE)
 #else
 #define LONG_GET(target, source, num_elems, pe)		shmem_long_get(target, source, num_elems, pe)
 #endif
 
 #ifdef USE_MPI3
-#define GETMEM(target, source, length, rank)		MPI_Get(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window)
+#define GETMEM(target, source, length, rank)		MPI_RGet(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window, &request); \
+							MPI_Wait(&request, MPI_STATUS_IGNORE)
 #else
 #define GETMEM(target, source, length, pe)		shmem_getmem(target, source, length, pe)
 #endif
 
 #ifdef USE_MPI3
-#define SHORT_PUT(target, source, num_elems, rank)	MPI_Put(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window)
+#define SHORT_PUT(target, source, num_elems, rank)	MPI_RPut(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window, &request); \
+							MPI_Wait(&request, MPI_STATUS_IGNORE)
 #else
 #define SHORT_PUT(target, source, num_elems, pe)	shmem_short_put(target, source, num_elems, pe)
 #endif

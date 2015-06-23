@@ -14,6 +14,7 @@ MPI_Win window;
 void *window_base;
 size_t window_size;
 void *next_window_address;
+MPI_Request request;
 #endif
 
 #ifdef USE_SHMEM
