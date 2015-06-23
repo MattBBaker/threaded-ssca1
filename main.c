@@ -235,6 +235,7 @@ int main(int argc, char **argv)
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);
 
+  BARRIER_ALL();
 #ifdef USE_MPI3
   MPI_Win_unlock_all(window);
 #endif
