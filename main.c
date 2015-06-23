@@ -116,7 +116,7 @@ int main(int argc, char **argv)
   window_size = 1000000;
   window_base = malloc(window_size);
   MPI_Win_create(window_base, window_size,  1, winfo, MPI_COMM_WORLD, &window);
-  MPI_Win_fence(0, window);
+  MPI_Win_lock_all(0, window);
   next_window_address = window_base;
   MPI_Info_free(&winfo);
   printf("Running with MPI-3, world size is %d\n", num_nodes);
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
   gettimeofday(&start_time, NULL);
   }
 #ifdef USE_MPI3  
-  MPI_Win_fence(0, window);
+  QUIET();
 #endif
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
 
@@ -234,6 +234,10 @@ int main(int argc, char **argv)
   //release_good_match(A);
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);
+
+#ifdef USE_MPI3
+  MPI_Win_unlock_all(window);
+#endif
 
   return 0;
 }

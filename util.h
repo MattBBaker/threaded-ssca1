@@ -51,7 +51,7 @@ extern void *next_window_address;
 #endif
 
 #ifdef USE_MPI3
-#define QUIET()		MPI_Win_fence(0, window)
+#define QUIET()		MPI_Win_flush_all(window)
 #else
 #define QUIET()		shmem_quiet()
 #endif
