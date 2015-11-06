@@ -56,7 +56,7 @@ extern MPI_Request request;
 #ifdef USE_MPI3
 #define LONG_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window); QUIET()
 #else
-#define LONG_GET(target, source, num_elems, pe)		shmem_long_get(target, source, num_elems, pe)
+#define LONG_GET(target, source, num_elems, pe)		shmem_long_get((long*)target, (long*)source, num_elems, pe)
 #endif
 
 #ifdef USE_MPI3
@@ -84,7 +84,7 @@ extern MPI_Request request;
 #endif
 
 #ifdef USE_MPI3
-static int malloc_all(size_t size, void **address) {
+static inline int malloc_all(size_t size, void **address) {
   *address = next_window_address;
   next_window_address += size;
   MPI_Barrier(MPI_COMM_WORLD);
@@ -95,7 +95,7 @@ static int malloc_all(size_t size, void **address) {
     return 0;
 }
 #else
-static int malloc_all(size_t size, void **address) {
+static inline int malloc_all(size_t size, void **address) {
   *address = shmalloc(size);
   if (*address == NULL)
     return -1;

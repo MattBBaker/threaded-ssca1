@@ -18,10 +18,10 @@ bakermb@ornl.gov
 
 SSCA1
 
-This benchmark is based on the DARPA HPCS benchmark challenge SSCA1. In particular, this implments SSCA1 kernel 1. Kernel 2 is also implmented for verification of the output of kernel 1.
+This benchmark is based on the DARPA HPCS benchmark challenge SSCA1. In particular, this implments SSCA1 kernel 1. Kernel 2 is also implmented for the verification of the output of kernel 1, but is not optimized for parallel execution.
 
-To build, edit the top level Makefile to choose options. By default it will build the OpenSHMEM version using gcc. If this is what you want, just type make.
+To build, edit the top level Makefile to choose options. By default it will build the OpenSHMEM version using cray with a gcc environment. If this is what you want, just type make.
 
 To run the program, use the platforms launcher (oshrun or mpirun is typical) as usual. The only runtime option is an environment variable called SCALE. SCALE adjusts the size of the inputs. An input of SCALE=22 should run in half the time as SCALE=23. The file parameters.c has some compile time options for the Smith-Waterman algorithm such as match score and gap penelties. Typical benchmarking usage should not modify these.
 
-After the benchmark runs, the main score of interest is the completion of time of kernel 1.
+After the benchmark runs, the benchmark will display the timings for the data generator, kernel 1, and kernel 2. The main kernel of interest is kernel 1, since it is the one optimized with OpenSHMEM and MPI3. There will also be verification data printed at the end. As long as the verification sequences are found and scored correctly the benchmark is functioning correctly.

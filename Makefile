@@ -17,16 +17,25 @@
 #  bakermb@ornl.gov
 
 
-#valid compilers: gcc; pgcc, pathcc
-#tested with gcc 4.3.3; pgi 8.0.6; pathscale 3.2
-COMPILER=mpicc
+#valid compilers: sgi, cray, mpicc
+
+COMPILER=cray
 
 #comment out this line to turn off debugging code
 #DEBUG=1
 
+#uncomment this line to use OpenSHMEM
+COMM=-DUSE_SHMEM
+
+#uncomment this line to use MPI3
+#COMM=-DUSE_MPI3
+
+#uncomment this line to enable prefetching
+PREFETCH=-DUSE_PREFETCH
+
 ifeq ($(COMPILER), sgi)
         CC=cc
-        COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_SHMEM -DSGI_SHMEM
+        COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH) -DSGI_SHMEM
         OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
         DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 	EXTRA_LIBS=-lsma -lmpi
@@ -34,43 +43,15 @@ endif
 
 ifeq ($(COMPILER), cray)
         CC=cc
-        COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_SHMEM
-        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers #-DUSE_PREFETCH
+        COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH)
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers 
         DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 endif
 
-ifeq ($(COMPILER), pgi)
-	CC=pgcc
-	COMMON_CFLAGS=-c99
-	OPTIMIZED_CFLAGS=-fastsse
-	DEBUG_CFLAGS=-O0 -g
-endif
-
-ifeq ($(COMPILER), gcc)
-	CC=gcc
-	COMMON_CFLAGS=-std=c99 -Wall -pipe -g #-pg #-Werror #-pthread #-fopenmp
-	OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
-	DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
-endif
-
-ifeq ($(COMPILER), pathscale)
-	CC=pathcc
-	COMMON_CFLAGS=-fullwarn -std=c99 -Wall
-	OPTIMIZED_CFLAGS=-g0 -O2
-	DEBUG_CFLAGS=-O0 -g2
-endif
-
-ifeq ($(COMPILER), intel)
-        CC=icc
-        COMMON_CFLAGS=-std=c99
-        OPTIMIZED_CFLAGS=-fast -xhost
-        DEBUG_CFLAGS=-O0 -g2
-endif
-
 ifeq ($(COMPILER), mpicc)
-	CC=cc
-	COMMON_CFLAGS=-std=c99 -Wall -pipe -g -DUSE_MPI3
-	OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -DUSE_PREFETCH
+	CC=mpicc
+	COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH)
+	OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
 	DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
 endif
 

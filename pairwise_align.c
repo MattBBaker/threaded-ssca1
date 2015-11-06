@@ -214,6 +214,8 @@ static void fetch_gap(gap_matrix_t *A, index_t m, index_t n, score_t *in){
   SHORT_GET(in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_ep);
 }
 
+/* maybe useful for going to further extremes. Commented out because GCC complains of unused functions */
+#if 0
 static void fetch_score_nb(score_matrix_t *A, index_t m, index_t n, score_t *in){
   int target_ep = n / A->local_length;
   int local_index = n % A->local_length;
@@ -227,6 +229,7 @@ static void fetch_gap_nb(gap_matrix_t *A, index_t m, index_t n, score_t *in){
 
   SHORT_GET_NB((short*)in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_ep);
 }
+#endif
 
 static void assign_score(score_matrix_t *A, index_t m, index_t n, score_t new_value){
   int target_ep = n / A->local_length;
@@ -292,7 +295,6 @@ static void collect_best_results(current_ends_t **good_ends, int max_reports, in
     answer->goodEnds[1][idx] = sorted_list[idx].match_end;
   }
 
-  printf("Collect frees\n");
   free(sorted_list);
 
   answer->numReports = max_values;
@@ -323,7 +325,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   const score_t gapExtend = sim_matrix->gapExtend;
   const score_t gapFirst = sim_matrix->gapStart + gapExtend;
   const index_t main_len = seq_data->main->length;
-  const index_t match_len = seq_data->match->length;
   codon_t current_main, current_match;
   codon_t next_main, next_match;
   const int max_threads = omp_get_max_threads();
@@ -425,13 +426,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_a = cmp_a > G ? cmp_a : G;
       assign_score(score_matrix,idx,m,cmp_a);
       new_score= cmp_a;
-      /*
-      if((W > 0 && cmp_a > good_ends[0]->min_score && cmp_a == G) &&
-         ((m == seq_data->match->length - 1) || (n == seq_data->match->length - 1) ||
-          (sim_matrix->similarity[fetch_from_seq(main_seq,m+1)][fetch_from_seq(match_seq,n+1)] <= 0))) {
-        considerAdding(cmp_a, minSeparation, m, n, maxReports, good_ends[0]);
-      }
-      */
 
       if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
         if (m+1 == seq_data->main->length || n == 0) {
@@ -462,13 +456,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_a = cmp_a > G ? cmp_a : G;
       assign_score(score_matrix,idx,m,cmp_a);
       new_score = cmp_a;
-      /*
-      if((cmp_a > good_ends[0]->min_score && W > 0 && cmp_a == G) &&
-         ((m == seq_data->match->length - 1) || (n == seq_data->match->length - 1) ||
-          (sim_matrix->similarity[fetch_from_seq(main_seq,m+1)][fetch_from_seq(match_seq,n+1)] <= 0))) {
-        considerAdding(cmp_a, minSeparation, m, n, maxReports, good_ends[0]);
-      }
-      */
 
       if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
         if (m+1 == seq_data->main->length || n == 0) {
@@ -521,11 +508,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
     }
 
     //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
-#if 0
-#ifdef _OPENMP
-#pragma omp parallel for private(m,n,W,G,F,E,cmp_a,cmp_b,next_main,next_match) //schedule(static) //firstprivate(idx,main_len,match_len,score_end) schedule(static)
-#endif
-#endif
     for(index_t antidiagonal = local_start; antidiagonal <= local_end; antidiagonal++) {
       m = antidiagonal;
       n = idx - m;
