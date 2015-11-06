@@ -1,0 +1,27 @@
+This file is part of SSCA1.
+
+Copyright (C) 2008-2015, UT-Battelle, LLC.
+
+This product includes software produced by UT-Battelle, LLC under Contract No.
+DE-AC05-00OR22725 with the Department of Energy.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the New BSD 3-clause software license (LICENSE).
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+LICENSE for more details.
+
+For more information please contact the SSCA1 developers at:
+bakermb@ornl.gov
+
+SSCA1
+
+This benchmark is based on the DARPA HPCS benchmark challenge SSCA1. In particular, this implments SSCA1 kernel 1. Kernel 2 is also implmented for verification of the output of kernel 1.
+
+To build, edit the top level Makefile to choose options. By default it will build the OpenSHMEM version using gcc. If this is what you want, just type make.
+
+To run the program, use the platforms launcher (oshrun or mpirun is typical) as usual. The only runtime option is an environment variable called SCALE. SCALE adjusts the size of the inputs. An input of SCALE=22 should run in half the time as SCALE=23. The file parameters.c has some compile time options for the Smith-Waterman algorithm such as match score and gap penelties. Typical benchmarking usage should not modify these.
+
+After the benchmark runs, the main score of interest is the completion of time of kernel 1.
