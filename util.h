@@ -33,6 +33,8 @@ extern void *window_base;
 extern size_t window_size;
 extern void *next_window_address;
 extern MPI_Request request;
+#elif defined(USE_NONE)
+#include <string.h>
 #else
 #ifdef SGI_SHMEM
 #include <mpp/shmem.h>
@@ -43,47 +45,11 @@ extern MPI_Request request;
 
 #ifdef USE_MPI3
 #define SHORT_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window); QUIET()
-#else
-#define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
-#endif
-
-#ifdef USE_MPI3
-#define SHORT_GET_NB(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window)
-#else
-#define SHORT_GET_NB(target, source, num_elems, pe)	shmem_short_get_nb(target, source, num_elems, pe, NULL)
-#endif
-
-#ifdef USE_MPI3
 #define LONG_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_LONG, rank, (void *)source - window_base, num_elems, MPI_LONG, window); QUIET()
-#else
-#define LONG_GET(target, source, num_elems, pe)		shmem_long_get((long*)target, (long*)source, num_elems, pe)
-#endif
-
-#ifdef USE_MPI3
 #define GETMEM(target, source, length, rank)		MPI_Get(target, length, MPI_BYTE, rank, (void *)source - window_base, length, MPI_BYTE, window); QUIET()
-#else
-#define GETMEM(target, source, length, pe)		shmem_getmem(target, source, length, pe)
-#endif
-
-#ifdef USE_MPI3
 #define SHORT_PUT(target, source, num_elems, rank)	MPI_Put(source, num_elems, MPI_SHORT, rank, (void *)target - window_base, num_elems, MPI_SHORT, window); QUIET()
-#else
-#define SHORT_PUT(target, source, num_elems, pe)	shmem_short_put(target, source, num_elems, pe)
-#endif
-
-#ifdef USE_MPI3
 #define QUIET()		MPI_Win_flush_all(window)
-#else
-#define QUIET()		shmem_quiet()
-#endif
-
-#ifdef USE_MPI3
 #define BARRIER_ALL()	QUIET(); MPI_Barrier(MPI_COMM_WORLD)
-#else
-#define BARRIER_ALL()	shmem_barrier_all()
-#endif
-
-#ifdef USE_MPI3
 static inline int malloc_all(size_t size, void **address) {
   *address = next_window_address;
   next_window_address += size;
@@ -94,22 +60,40 @@ static inline int malloc_all(size_t size, void **address) {
   } else
     return 0;
 }
-#else
-static inline int malloc_all(size_t size, void **address) {
-  *address = shmalloc(size);
+#define FREE_ALL(address) /* unable to free memory like this */
+#define WAIT_NB() QUIET()
+#elif defined(USE_NONE)
+#define QUIET()
+#define BARRIER_ALL()
+#define GETMEM(target, source, length, rank) memcpy(target, source, length)
+static inline int malloc_all(size_t size, void **address)
+{
+  *address = malloc(size);
   if (*address == NULL)
     return -1;
   else
     return 0;
 }
-#endif
-
-#ifdef USE_MPI3
-#define FREE_ALL(address) /* unable to free memory like this */
+#define FREE_ALL(address) free(address)
 #else
-#define FREE_ALL(address) shfree(address)
+#define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
+#define LONG_GET(target, source, num_elems, pe)		shmem_long_get((long*)target, (long*)source, num_elems, pe)
+#define GETMEM(target, source, length, pe)		shmem_getmem(target, source, length, pe)
+#define QUIET()		shmem_quiet()
+#define SHORT_PUT(target, source, num_elems, pe)	shmem_short_put(target, source, num_elems, pe)
+#define BARRIER_ALL()	shmem_barrier_all()
+static inline int malloc_all(size_t size, void **address) {
+  *address = shmem_malloc(size);
+  if (*address == NULL)
+    return -1;
+  else
+    return 0;
+}
+#define FREE_ALL(address) shmem_free(address)
+#define WAIT_NB() QUIET()
 #endif
 
+#ifndef USE_NONE
 static inline int global_index_to_rank(const seq_t *in, const index_t codon_index){
   return codon_index / in->local_size;
 }
@@ -124,14 +108,6 @@ static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, co
   short *typed_seq = (short *)in->sequence;
   SHORT_GET((short *)out, &(typed_seq[local_index]), 1, target_ep);
 }
-
-static inline void fetch_from_seq_nb(const seq_t *in, index_t const codon_index, codon_t *out){
-  int target_ep = global_index_to_rank(in,codon_index);
-  int local_index = global_index_to_local_index(in,codon_index);
-  short *typed_seq = (short *)in->sequence;
-  SHORT_GET_NB((short *)out, &(typed_seq[local_index]), 1, target_ep);
-}
-
 static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
   int target_ep = global_index_to_rank(in,codon_index);
   int local_index = global_index_to_local_index(in,codon_index);
@@ -139,11 +115,14 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
   short typed_data = (short)data;
   SHORT_PUT(&(typed_seq[local_index]), &typed_data, 1, target_ep);
 }
-
-#ifdef USE_MPI3
-#define WAIT_NB() QUIET()
 #else
-#define WAIT_NB() QUIET()
+static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
+  *out = in->sequence[codon_index];
+}
+
+static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
+  in->sequence[codon_index] = data;
+}
 #endif
 
 void distribute_rng_seed(unsigned int new_seed);

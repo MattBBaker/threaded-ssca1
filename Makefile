@@ -31,21 +31,28 @@ COMM=-DUSE_SHMEM
 #COMM=-DUSE_MPI3
 
 #uncomment this line to enable prefetching
-PREFETCH=-DUSE_PREFETCH
+#PREFETCH=-DUSE_PREFETCH
 
 ifeq ($(COMPILER), sgi)
         CC=cc
         COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH) -DSGI_SHMEM
-        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers
-        DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
+        DEBUG_CFLAGS=-O0 -ggdb -DDEBUG -fopenmp
 	EXTRA_LIBS=-lsma -lmpi
 endif
 
-ifeq ($(COMPILER), cray)
-        CC=cc
+ifeq ($(COMPILER), gcc)
+        CC=gcc
         COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH)
-        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers 
-        DEBUG_CFLAGS=-O0 -ggdb -DDEBUG
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
+        DEBUG_CFLAGS=-Og -ggdb -DDEBUG -fopenmp
+endif
+
+ifeq ($(COMPILER), cray)
+        CC=oshcc
+        COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH)
+        OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
+        DEBUG_CFLAGS=-Og -ggdb -DDEBUG -fopenmp -pg
 endif
 
 ifeq ($(COMPILER), mpicc)

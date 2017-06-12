@@ -36,6 +36,7 @@
 #include <scan_backwards.h>
 #include <limits.h>
 #include <util.h>
+#include <shmemx.h>
 
 unsigned int random_seed;
 int num_nodes;
@@ -142,7 +143,10 @@ int main(int argc, char **argv)
   printf("Running with MPI-3, world size is %d\n", num_nodes);
 #else
 #ifdef USE_SHMEM
-  start_pes(0);
+  //start_pes(0);
+  int thread_level;
+  shmem_init();
+  shmemx_init_thread(SHMEM_THREAD_MULTIPLE, &thread_level);
   num_nodes=shmem_n_pes();
   rank=shmem_my_pe();
   if(rank == 0)
