@@ -91,6 +91,7 @@ static inline int malloc_all(size_t size, void **address) {
 }
 #define FREE_ALL(address) shmem_free(address)
 #define WAIT_NB() QUIET()
+#define SHORT_GET_NB(target, source, num_elems, pe) shmem_short_get_nbi(target, source, num_elems, pe, NULL)
 #endif
 
 #ifndef USE_NONE
@@ -106,6 +107,7 @@ static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, co
   int target_ep = global_index_to_rank(in,codon_index);
   int local_index = global_index_to_local_index(in,codon_index);
   short *typed_seq = (short *)in->sequence;
+  //printf("fetch_from_seq dest=%p src=%p seq_ptr=%p\n", out, typed_seq, in);
   SHORT_GET((short *)out, &(typed_seq[local_index]), 1, target_ep);
 }
 static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
@@ -115,6 +117,14 @@ static inline void write_to_seq(const seq_t *in, const index_t codon_index, codo
   short typed_data = (short)data;
   SHORT_PUT(&(typed_seq[local_index]), &typed_data, 1, target_ep);
 }
+static inline void fetch_from_seq_nb(const seq_t *in, index_t const codon_index, codon_t *out){
+  int target_ep = global_index_to_rank(in,codon_index);
+  int local_index = global_index_to_local_index(in,codon_index);
+  short *typed_seq = (short *)in->sequence;
+  //printf("fetch_from_seq_nb dest=%p src=%p seq_ptr=%p\n", out, typed_seq, in);
+  SHORT_GET_NB((short *)out, &(typed_seq[local_index]), 1, target_ep);
+}
+
 #else
 static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
   *out = in->sequence[codon_index];
