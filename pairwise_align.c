@@ -381,18 +381,20 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
     codon_t current_main, current_match;
     codon_t next_main, next_match;
     const int max_threads = omp_get_max_threads();
-
+/*
     for(int idx=0; idx < _SHMEM_REDUCE_SYNC_SIZE; idx++) {
         collect_pSync[idx] = _SHMEM_SYNC_VALUE;
     }
+*/
 /*
     int gogogo=0;
     while(gogogo==0);
     shmem_barrier_all();
 */
     current_ends_t **good_ends = (current_ends_t **)malloc(sizeof(current_ends_t *)*max_threads);
+//#pragma omp parallel for
     for(int jdx=0; jdx < max_threads; jdx++) {
-        int idx = omp_get_thread_num();
+        int idx = idx;
         malloc_all(sizeof(current_ends_t), (void **)&good_ends[idx]);
         good_ends[idx]->size = sortReports;
         good_ends[idx]->report = 0;
@@ -568,8 +570,10 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
 
         //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
 #pragma omp parallel for                                                \
-    private(m,n,current_main, current_match, F, E, G, W, cmp_a, cmp_b, cmp_c, new_score) \
-    shared(good_ends) schedule(static) ordered
+    default(none) \
+    private(m,n,current_main, current_match, F, E, G, W, cmp_a, cmp_b, cmp_c, new_score, next_main, next_match, next_G, next_E, next_F) \
+    shared(good_ends,idx, local_start, local_end, main_seq,match_seq,main_gap_matrix,match_gap_matrix,seq_data,score_matrix,sim_matrix) \
+    schedule(static) ordered
         for(index_t antidiagonal = local_start; antidiagonal <= local_end; antidiagonal++) {
             m = antidiagonal;
             n = idx - m;
