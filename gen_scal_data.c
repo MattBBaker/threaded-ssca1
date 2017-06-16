@@ -90,6 +90,7 @@ void create_sequence(seq_t *sequence, char validations[][32], int num_validation
       }
     }
   }
+  shmem_quiet();
   free(indexes);
 
 }

@@ -24,6 +24,7 @@
 #include <pairwise_align.h>
 #include <types.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #ifdef USE_MPI3
 #include <mpi.h>
@@ -42,6 +43,38 @@ extern MPI_Request request;
 #include <shmem.h>
 #endif
 #endif
+
+#ifdef USE_NONE
+static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
+  *out = in->sequence[codon_index];
+}
+
+static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
+  in->sequence[codon_index] = data;
+}
+
+#define QUIET()
+#define BARRIER_ALL()
+#define GETMEM(target, source, length, rank) memcpy(target, source, length)
+static inline int malloc_all(size_t size, void **address)
+{
+  *address = malloc(size);
+  if (*address == NULL)
+    return -1;
+  else
+    return 0;
+}
+#define FREE_ALL(address) free(address)
+
+#else
+
+static inline int global_index_to_rank(const seq_t *in, const index_t codon_index){
+  return codon_index / in->local_size;
+}
+
+static inline int global_index_to_local_index(const seq_t *in, const index_t codon_index){
+  return codon_index % in->local_size;
+}
 
 #ifdef USE_MPI3
 #define SHORT_GET(target, source, num_elems, rank)	MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window); QUIET()
@@ -62,19 +95,7 @@ static inline int malloc_all(size_t size, void **address) {
 }
 #define FREE_ALL(address) /* unable to free memory like this */
 #define WAIT_NB() QUIET()
-#elif defined(USE_NONE)
-#define QUIET()
-#define BARRIER_ALL()
-#define GETMEM(target, source, length, rank) memcpy(target, source, length)
-static inline int malloc_all(size_t size, void **address)
-{
-  *address = malloc(size);
-  if (*address == NULL)
-    return -1;
-  else
-    return 0;
-}
-#define FREE_ALL(address) free(address)
+#define SHORT_GET_NB(target, source, num_elems, rank) MPI_Get(target, num_elems, MPI_SHORT, rank, (void *)source - window_base, num_elems, MPI_SHORT, window)
 #else
 #define SHORT_GET(target, source, num_elems, pe)	shmem_short_get(target, source, num_elems, pe)
 #define LONG_GET(target, source, num_elems, pe)		shmem_long_get((long*)target, (long*)source, num_elems, pe)
@@ -84,6 +105,7 @@ static inline int malloc_all(size_t size, void **address)
 #define BARRIER_ALL()	shmem_barrier_all()
 static inline int malloc_all(size_t size, void **address) {
   *address = shmem_malloc(size);
+  //printf("shmem_malloc returned pointer %p\n", *address);
   if (*address == NULL)
     return -1;
   else
@@ -91,38 +113,32 @@ static inline int malloc_all(size_t size, void **address) {
 }
 #define FREE_ALL(address) shmem_free(address)
 #define WAIT_NB() QUIET()
+#define SHORT_GET_NB(target, source, num_elems, pe) shmem_short_get_nbi(target, source, num_elems, pe)
 #endif
 
-#ifndef USE_NONE
-static inline int global_index_to_rank(const seq_t *in, const index_t codon_index){
-  return codon_index / in->local_size;
-}
+typedef short shmem_codon_t;
 
-static inline int global_index_to_local_index(const seq_t *in, const index_t codon_index){
-  return codon_index % in->local_size;
+static inline void fetch_from_seq_nb(const seq_t *in, index_t const codon_index, codon_t *out){
+    shmem_codon_t target_ep = global_index_to_rank(in,codon_index);
+    shmem_codon_t local_index = global_index_to_local_index(in,codon_index);
+    shmem_codon_t *typed_seq = (shmem_codon_t *)in->sequence;
+    SHORT_GET_NB((shmem_codon_t *)out, &(typed_seq[local_index]), 1, target_ep);
 }
 
 static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
-  int target_ep = global_index_to_rank(in,codon_index);
-  int local_index = global_index_to_local_index(in,codon_index);
-  short *typed_seq = (short *)in->sequence;
-  SHORT_GET((short *)out, &(typed_seq[local_index]), 1, target_ep);
+  shmem_codon_t target_ep = global_index_to_rank(in,codon_index);
+  shmem_codon_t local_index = global_index_to_local_index(in,codon_index);
+  shmem_codon_t *typed_seq = (shmem_codon_t *)in->sequence;
+  SHORT_GET((shmem_codon_t *)out, &(typed_seq[local_index]), 1, target_ep);
 }
 static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
-  int target_ep = global_index_to_rank(in,codon_index);
-  int local_index = global_index_to_local_index(in,codon_index);
-  short *typed_seq = (short *)in->sequence;
-  short typed_data = (short)data;
+  shmem_codon_t target_ep = global_index_to_rank(in,codon_index);
+  shmem_codon_t local_index = global_index_to_local_index(in,codon_index);
+  shmem_codon_t *typed_seq = (shmem_codon_t *)in->sequence;
+  shmem_codon_t typed_data = (shmem_codon_t)data;
   SHORT_PUT(&(typed_seq[local_index]), &typed_data, 1, target_ep);
 }
-#else
-static inline void fetch_from_seq(const seq_t *in, index_t const codon_index, codon_t *out){
-  *out = in->sequence[codon_index];
-}
 
-static inline void write_to_seq(const seq_t *in, const index_t codon_index, codon_t data){
-  in->sequence[codon_index] = data;
-}
 #endif
 
 void distribute_rng_seed(unsigned int new_seed);

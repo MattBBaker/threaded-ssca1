@@ -372,265 +372,304 @@ static void collect_best_results(current_ends_t **good_ends, int max_reports, in
  */
 
 good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, const int minScore, const int maxReports, const int minSeparation) {
-  const int sortReports = maxReports * 10;
-  const seq_t *main_seq = seq_data->main;
-  const seq_t *match_seq = seq_data->match;
-  const score_t gapExtend = sim_matrix->gapExtend;
-  const score_t gapFirst = sim_matrix->gapStart + gapExtend;
-  const index_t main_len = seq_data->main->length;
-  codon_t current_main, current_match;
-  codon_t next_main, next_match;
-  const int max_threads = omp_get_max_threads();
+    const int sortReports = maxReports * 10;
+    const seq_t *main_seq = seq_data->main;
+    const seq_t *match_seq = seq_data->match;
+    const score_t gapExtend = sim_matrix->gapExtend;
+    const score_t gapFirst = sim_matrix->gapStart + gapExtend;
+    const index_t main_len = seq_data->main->length;
+    codon_t current_main, current_match;
+    codon_t next_main, next_match;
+    const int max_threads = omp_get_max_threads();
 
-  current_ends_t **good_ends = (current_ends_t **)malloc(sizeof(current_ends_t *)*max_threads);
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-  for(int jdx=0; jdx < max_threads; jdx++) {
-    int idx = omp_get_thread_num();
-    malloc_all(sizeof(current_ends_t), (void **)&good_ends[idx]);
-    good_ends[idx]->size = sortReports;
-    good_ends[idx]->report = 0;
-    malloc_all(sizeof(score_t)*sortReports, (void **)&good_ends[idx]->goodScores);
-    malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[0]);
-    malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[1]);
-    good_ends[idx]->min_score = minScore;
-  }
-
-  score_matrix_t *restrict score_matrix = alloc_score_matrix(seq_data->match->length);
-  gap_matrix_t *restrict main_gap_matrix = alloc_gap_matrix(seq_data->match->length);
-  gap_matrix_t *restrict match_gap_matrix = alloc_gap_matrix(seq_data->match->length);
-
-  index_t score_start, score_end;
-  score_t G, W, E, F, cmp_a, cmp_b, cmp_c, new_score, next_G, next_F, next_E;
-  index_t m, n;
-
-  good_match_t *answer;
-  codon_t main_codon;
-  codon_t match_codon;
-
-  index_t local_main_start = seq_data->main->local_size * rank;
-  index_t local_main_end = seq_data->main->local_size * (rank+1) - 1;
-
-  /*
-  if(rank == 0){
-    printf("Ready to debug on PID=%i\n", getpid());
+    for(int idx=0; idx < _SHMEM_REDUCE_SYNC_SIZE; idx++) {
+        collect_pSync[idx] = _SHMEM_SYNC_VALUE;
+    }
+/*
     int gogogo=0;
-    while(gogogo==0){}
-  }
-  */
-  //First iteration, done by hand. Basically idx=0 in the big loop
-  if(rank == 0){
-    fetch_from_seq(main_seq,0,&main_codon);
-    fetch_from_seq(match_seq,0,&match_codon);
+    while(gogogo==0);
+    shmem_barrier_all();
+*/
+    current_ends_t **good_ends = (current_ends_t **)malloc(sizeof(current_ends_t *)*max_threads);
+    for(int jdx=0; jdx < max_threads; jdx++) {
+        int idx = omp_get_thread_num();
+        malloc_all(sizeof(current_ends_t), (void **)&good_ends[idx]);
+        good_ends[idx]->size = sortReports;
+        good_ends[idx]->report = 0;
+        malloc_all(sizeof(score_t)*sortReports, (void **)&good_ends[idx]->goodScores);
+        malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[0]);
+        malloc_all(sizeof(index_t)*sortReports, (void **)&good_ends[idx]->goodEnds[1]);
+        good_ends[idx]->min_score = minScore;
+    }
 
-  W = sim_matrix->similarity[main_codon][match_codon];
-  assign_score(score_matrix,0,0,0 > W ? 0 : W);
-  assign_gap(main_gap_matrix,0,0,-gapFirst + W);
-  assign_gap(match_gap_matrix,0,0,-gapFirst + W);
+    score_matrix_t *restrict score_matrix = alloc_score_matrix(seq_data->match->length);
+    gap_matrix_t *restrict main_gap_matrix = alloc_gap_matrix(seq_data->match->length);
+    gap_matrix_t *restrict match_gap_matrix = alloc_gap_matrix(seq_data->match->length);
 
-  //idx=1 m=0,1 n =1,0
-  fetch_from_seq(main_seq,0,&main_codon);
-  fetch_from_seq(match_seq,1, &match_codon);
+    //shmem_barrier_all();
+    //shmem_barrier(0,0,2,&collect_pSync[0]);
 
-  W = sim_matrix->similarity[main_codon][match_codon];
-  G = W;
-  fetch_gap(main_gap_matrix,0,0,&E);
-  cmp_a = 0 > E ? 0 : E;
-  cmp_a = cmp_a > G ? cmp_a : G;
-  assign_score(score_matrix,1,1,cmp_a);
-  cmp_a = E - gapExtend;
-  cmp_b = G - gapFirst;
+    index_t score_start, score_end;
+    score_t G, W, E, F, cmp_a, cmp_b, cmp_c, new_score, next_G, next_F, next_E;
+    index_t m, n;
 
-  assign_gap(main_gap_matrix,1,0,cmp_a > cmp_b ? cmp_a : cmp_b);
-  assign_gap(match_gap_matrix,1,0,-gapFirst > cmp_b ? -gapFirst : cmp_b);
+    good_match_t *answer;
+    codon_t main_codon;
+    codon_t match_codon;
 
-  fetch_from_seq(main_seq,1,&main_codon);
-  fetch_from_seq(match_seq,0,&match_codon);
+    index_t local_main_start = seq_data->main->local_size * rank;
+    index_t local_main_end = seq_data->main->local_size * (rank+1) - 1;
 
-  W = sim_matrix->similarity[main_codon][match_codon];
-  G = W;
-  fetch_gap(match_gap_matrix,0,0, &F);
-  cmp_a = 0 > F ? 0 : F;
-  cmp_a = cmp_a > G ? cmp_a : G;
-  assign_score(score_matrix,1,0,cmp_a);
-  cmp_a = F - gapExtend;
-  cmp_b = G - gapFirst;
-  assign_gap(main_gap_matrix,1,1,-gapFirst > cmp_b ? -gapFirst : cmp_b);
-  assign_gap(match_gap_matrix,1,1,cmp_a > cmp_b ? cmp_a : cmp_b);
-  }
-
-  for(index_t idx=2; idx < seq_data->match->length * 2 - 1; idx++) {
-    BARRIER_ALL();
-
-    score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
-    score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
-
-    if(idx < seq_data->match->length) {
+    /*
       if(rank == 0){
-      m = 0;
-      n = idx;
-      fetch_from_seq(main_seq,m,&main_codon);
-      fetch_from_seq(match_seq,n,&match_codon);
-      W = sim_matrix->similarity[main_codon][match_codon];
-      G = W;
-      fetch_gap(match_gap_matrix,idx-1,n-1,&F);
-      cmp_a = F > 0 ? F : 0;
-      cmp_a = cmp_a > G ? cmp_a : G;
-      assign_score(score_matrix,idx,m,cmp_a);
-      new_score= cmp_a;
-
-      if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
-        if (m+1 == seq_data->main->length || n == 0) {
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
-        }
-        else {
-        fetch_from_seq(main_seq, m+1, &next_main);
-        fetch_from_seq(match_seq, n-1, &next_match);
-
-        if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
-        }
-        }
+      printf("Ready to debug on PID=%i\n", getpid());
+      int gogogo=0;
+      while(gogogo==0){}
       }
+    */
+    //First iteration, done by hand. Basically idx=0 in the big loop
+    if(rank == 0){
+        fetch_from_seq(main_seq,0,&main_codon);
+        fetch_from_seq(match_seq,0,&match_codon);
 
-      cmp_a = F - gapExtend;
-      cmp_b = G - gapFirst;
-      assign_gap(match_gap_matrix,idx,n,cmp_a > cmp_b ? cmp_a : cmp_b);
+        W = sim_matrix->similarity[main_codon][match_codon];
+        assign_score(score_matrix,0,0,0 > W ? 0 : W);
+        assign_gap(main_gap_matrix,0,0,-gapFirst + W);
+        assign_gap(match_gap_matrix,0,0,-gapFirst + W);
 
-      m = idx;
-      n = 0;
-      fetch_from_seq(main_seq,m,&main_codon);
-      fetch_from_seq(match_seq,n,&match_codon);
-      W = sim_matrix->similarity[main_codon][match_codon];
-      G = W;
-      fetch_gap(main_gap_matrix, idx-1, m-1, &E);
-      cmp_a = E > 0 ? E : 0;
-      cmp_a = cmp_a > G ? cmp_a : G;
-      assign_score(score_matrix,idx,m,cmp_a);
-      new_score = cmp_a;
+        //idx=1 m=0,1 n =1,0
+        fetch_from_seq(main_seq,0,&main_codon);
+        fetch_from_seq(match_seq,1, &match_codon);
 
-      if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
-        if (m+1 == seq_data->main->length || n == 0) {
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+        W = sim_matrix->similarity[main_codon][match_codon];
+        G = W;
+        fetch_gap(main_gap_matrix,0,0,&E);
+        cmp_a = 0 > E ? 0 : E;
+        cmp_a = cmp_a > G ? cmp_a : G;
+        assign_score(score_matrix,1,1,cmp_a);
+        cmp_a = E - gapExtend;
+        cmp_b = G - gapFirst;
+
+        assign_gap(main_gap_matrix,1,0,cmp_a > cmp_b ? cmp_a : cmp_b);
+        assign_gap(match_gap_matrix,1,0,-gapFirst > cmp_b ? -gapFirst : cmp_b);
+
+        fetch_from_seq(main_seq,1,&main_codon);
+        fetch_from_seq(match_seq,0,&match_codon);
+
+        W = sim_matrix->similarity[main_codon][match_codon];
+        G = W;
+        fetch_gap(match_gap_matrix,0,0, &F);
+        cmp_a = 0 > F ? 0 : F;
+        cmp_a = cmp_a > G ? cmp_a : G;
+        assign_score(score_matrix,1,0,cmp_a);
+        cmp_a = F - gapExtend;
+        cmp_b = G - gapFirst;
+        assign_gap(main_gap_matrix,1,1,-gapFirst > cmp_b ? -gapFirst : cmp_b);
+        assign_gap(match_gap_matrix,1,1,cmp_a > cmp_b ? cmp_a : cmp_b);
+    }
+    for(index_t idx=2; idx < seq_data->match->length * 2 - 1; idx++) {
+        BARRIER_ALL();
+        score_start = idx > (seq_data->match->length - 1) ? (idx-(seq_data->match->length-1)) : 0;
+        score_end = idx < (seq_data->match->length-1) ? (idx) : (seq_data->match->length-1);
+
+        if(idx < seq_data->match->length) {
+            if(rank == 0){
+                m = 0;
+                n = idx;
+                fetch_from_seq(main_seq,m,&main_codon);
+                fetch_from_seq(match_seq,n,&match_codon);
+                W = sim_matrix->similarity[main_codon][match_codon];
+                G = W;
+                fetch_gap(match_gap_matrix,idx-1,n-1,&F);
+                cmp_a = F > 0 ? F : 0;
+                cmp_a = cmp_a > G ? cmp_a : G;
+                assign_score(score_matrix,idx,m,cmp_a);
+                new_score= cmp_a;
+
+                if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
+                    if (m+1 == seq_data->main->length || n == 0) {
+                        considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                    }
+                    else {
+                        fetch_from_seq(main_seq, m+1, &next_main);
+                        fetch_from_seq(match_seq, n-1, &next_match);
+
+                        if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
+                            considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                        }
+                    }
+                }
+
+                cmp_a = F - gapExtend;
+                cmp_b = G - gapFirst;
+                assign_gap(match_gap_matrix,idx,n,cmp_a > cmp_b ? cmp_a : cmp_b);
+
+                m = idx;
+                n = 0;
+                fetch_from_seq(main_seq,m,&main_codon);
+                fetch_from_seq(match_seq,n,&match_codon);
+                W = sim_matrix->similarity[main_codon][match_codon];
+                G = W;
+                fetch_gap(main_gap_matrix, idx-1, m-1, &E);
+                cmp_a = E > 0 ? E : 0;
+                cmp_a = cmp_a > G ? cmp_a : G;
+                assign_score(score_matrix,idx,m,cmp_a);
+                new_score = cmp_a;
+
+                if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
+                    if (m+1 == seq_data->main->length || n == 0) {
+                        considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                    } else {
+
+                        fetch_from_seq(main_seq, m+1, &next_main);
+                        fetch_from_seq(match_seq, n-1, &next_match);
+
+                        if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
+                            considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                        }
+                    }
+                }
+
+                cmp_a = E - gapExtend;
+                cmp_b = G - gapFirst;
+                assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
+            }
+            score_start++;
+            score_end = score_end - 1;
+        }
+
+        index_t local_start, local_end;
+
+        if(score_end < local_main_start && score_start > local_main_end){
+
+            local_start = 1;
+            local_end = 0;
+
         } else {
 
-        fetch_from_seq(main_seq, m+1, &next_main);
-        fetch_from_seq(match_seq, n-1, &next_match);
+            if(local_main_start > score_start){
+                local_start = local_main_start;
+            } else {
+                local_start = score_start;
+            }
 
-        if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+            if(score_end > local_main_end){
+                local_end = local_main_end;
+            } else {
+                local_end = score_end;
+            }
+
+            fetch_from_seq(main_seq,local_start,&next_main);
+            fetch_from_seq(match_seq,idx - score_start,&next_match);
+            fetch_score(score_matrix, (idx-2)%3, local_start-1, &next_G);
+            fetch_gap(match_gap_matrix, idx-1, idx - (score_start+1), &next_F);
+            fetch_gap(main_gap_matrix, idx-1, local_start-1, &next_E);
         }
-        }
-      }
 
-      cmp_a = E - gapExtend;
-      cmp_b = G - gapFirst;
-      assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
-      }
-      score_start++;
-      score_end = score_end - 1;
-    }
-
-    index_t local_start, local_end;
-
-    if(score_end < local_main_start && score_start > local_main_end){
-
-      local_start = 1;
-      local_end = 0;
-
-    } else {
-
-      if(local_main_start > score_start){
-        local_start = local_main_start;
-      } else {
-        local_start = score_start;
-      }
-
-      if(score_end > local_main_end){
-        local_end = local_main_end;
-      } else {
-        local_end = score_end;
-      }
-
-      fetch_from_seq(main_seq,local_start,&next_main);
-      fetch_from_seq(match_seq,idx - score_start,&next_match);
-      fetch_score(score_matrix, (idx-2)%3, local_start-1, &next_G);
-      fetch_gap(match_gap_matrix, idx-1, idx - (score_start+1), &next_F);
-      fetch_gap(main_gap_matrix, idx-1, local_start-1, &next_E);
-    }
-
-    //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
-#pragma omp parallel for  \
+        //As a note, this loop is the program execution time. If you're looking to optimize this benchmark, this is all that counts.
+#pragma omp parallel for                                                \
     private(m,n,current_main, current_match, F, E, G, W, cmp_a, cmp_b, cmp_c, new_score) \
     shared(good_ends) schedule(static) ordered
-    for(index_t antidiagonal = local_start; antidiagonal <= local_end; antidiagonal++) {
-      m = antidiagonal;
-      n = idx - m;
-      fetch_from_seq(main_seq, m, &current_main);
-      fetch_from_seq(match_seq, n, &current_match);
+        for(index_t antidiagonal = local_start; antidiagonal <= local_end; antidiagonal++) {
+            m = antidiagonal;
+            n = idx - m;
+#ifdef USE_PREFETCH
+            current_main = next_main;
+            current_match = next_match;
+            G = next_G;
+            F = next_F;
+            E = next_E;
 
-      fetch_gap(match_gap_matrix, idx-1, n-1, &F);
-      fetch_gap(main_gap_matrix, idx-1, m-1, &E);
-      fetch_score(score_matrix, (idx-2)%3, m-1, &G);
-      cmp_a = 0;
-      cmp_a = cmp_a > E ? cmp_a : E;
-      cmp_a = cmp_a > F ? cmp_a : F;
-      W = sim_matrix->similarity[current_main][current_match];
-      G += W;
-      new_score = cmp_a > G ? cmp_a : G;
+            if (m < (seq_data->main->length-1))
+                fetch_from_seq_nb(main_seq, m+1, &next_main);
+            if (n > 0)
+                fetch_from_seq_nb(match_seq, n-1, &next_match);
+            if (n > 1)
+                fetch_gap(match_gap_matrix, idx-1, n-2, &next_F);
 
-      if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
+            fetch_gap(main_gap_matrix, idx-1, m, &next_E);
+            fetch_score(score_matrix, (idx-2)%3, m, &next_G);
+#else
+            fetch_from_seq(main_seq, m, &current_main);
+            fetch_from_seq(match_seq, n, &current_match);
 
-        if (m+1 == seq_data->main->length || n == 0) {
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
-        } else {
-        fetch_from_seq(main_seq, m+1, &next_main);
-        fetch_from_seq(match_seq, n-1, &next_match);
-        if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
-          considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
-        }
-        }
-      }
-      cmp_a = E - gapExtend;
-      cmp_b = G - gapFirst;
-      cmp_c = F - gapExtend;
+            fetch_gap(match_gap_matrix, idx-1, n-1, &F);
+            fetch_gap(main_gap_matrix, idx-1, m-1, &E);
+            fetch_score(score_matrix, (idx-2)%3, m-1, &G);
+#endif
+            cmp_a = 0;
+            cmp_a = cmp_a > E ? cmp_a : E;
+            cmp_a = cmp_a > F ? cmp_a : F;
+            W = sim_matrix->similarity[current_main][current_match];
+            G += W;
+            new_score = cmp_a > G ? cmp_a : G;
 
-      assign_score(score_matrix,idx,m,new_score);
-      assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
-      assign_gap(match_gap_matrix, idx, n, cmp_c > cmp_b ? cmp_c : cmp_b);
+            if((new_score > good_ends[omp_get_thread_num()]->min_score && W > 0 && new_score == G)){
+
+#ifdef USE_PREFETCH
+                if (m+1 == seq_data->main->length || n == 0) {
+                    considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                } else {
+                    WAIT_NB();
+
+                    if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
+                        considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                    }
+                }
+#else
+                if (m+1 == seq_data->main->length || n == 0) {
+                    considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                } else {
+                    fetch_from_seq(main_seq, m+1, &next_main);
+                    fetch_from_seq(match_seq, n-1, &next_match);
+                    if((m == main_len - 1) || (n == 0) || sim_matrix->similarity[next_main][next_match] <= 0){
+                        considerAdding(new_score, minSeparation, m, n, maxReports, good_ends[omp_get_thread_num()]);
+                    }
+                }
+#endif
+            }
+            cmp_a = E - gapExtend;
+            cmp_b = G - gapFirst;
+            cmp_c = F - gapExtend;
+
+#ifdef USE_PREFETCH
+            WAIT_NB();
+#endif
+            assign_score(score_matrix,idx,m,new_score);
+            assign_gap(main_gap_matrix, idx, m, cmp_a > cmp_b ? cmp_a : cmp_b);
+            assign_gap(match_gap_matrix, idx, n, cmp_c > cmp_b ? cmp_c : cmp_b);
     
+        }
     }
-  }
 
-  answer = (good_match_t*)malloc(sizeof(good_match_t));
-  answer->simMatrix = sim_matrix;
-  answer->seqData = seq_data;
-  answer->goodEnds[0] = (index_t*)malloc(sizeof(index_t)*maxReports);
-  answer->goodEnds[1] = (index_t*)malloc(sizeof(index_t)*maxReports);
-  answer->goodScores = (score_t*)malloc(sizeof(score_t)*maxReports);
+    answer = (good_match_t*)malloc(sizeof(good_match_t));
+    answer->simMatrix = sim_matrix;
+    answer->seqData = seq_data;
+    answer->goodEnds[0] = (index_t*)malloc(sizeof(index_t)*maxReports);
+    answer->goodEnds[1] = (index_t*)malloc(sizeof(index_t)*maxReports);
+    answer->goodScores = (score_t*)malloc(sizeof(score_t)*maxReports);
 
-  answer->bestEnds[0] = NULL;
-  answer->bestStarts[0] = NULL;
-  answer->bestEnds[1] = NULL;
-  answer->bestStarts[1] = NULL;
-  answer->bestSeqs = NULL;
-  answer->bestScores = NULL;
+    answer->bestEnds[0] = NULL;
+    answer->bestStarts[0] = NULL;
+    answer->bestEnds[1] = NULL;
+    answer->bestStarts[1] = NULL;
+    answer->bestSeqs = NULL;
+    answer->bestScores = NULL;
 
-  collect_best_results(good_ends, maxReports, max_threads, answer);
+    collect_best_results(good_ends, maxReports, max_threads, answer);
 
-  free_score_matrix(score_matrix);
-  free_gap_matrix(main_gap_matrix);
-  free_gap_matrix(match_gap_matrix);
+    free_score_matrix(score_matrix);
+    free_gap_matrix(main_gap_matrix);
+    free_gap_matrix(match_gap_matrix);
 
-  for(int idx=0; idx < max_threads; idx++) {
-    FREE_ALL(good_ends[idx]->goodScores);
-    FREE_ALL(good_ends[idx]->goodEnds[0]);
-    FREE_ALL(good_ends[idx]->goodEnds[1]);
-    FREE_ALL(good_ends[idx]);
-  }
+    for(int idx=0; idx < max_threads; idx++) {
+        FREE_ALL(good_ends[idx]->goodScores);
+        FREE_ALL(good_ends[idx]->goodEnds[0]);
+        FREE_ALL(good_ends[idx]->goodEnds[1]);
+        FREE_ALL(good_ends[idx]);
+    }
 
-  free(good_ends);
+    free(good_ends);
 
-  return answer;
+    return answer;
 }

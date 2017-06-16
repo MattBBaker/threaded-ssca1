@@ -149,8 +149,9 @@ int main(int argc, char **argv)
   shmemx_init_thread(SHMEM_THREAD_MULTIPLE, &thread_level);
   num_nodes=shmem_n_pes();
   rank=shmem_my_pe();
-  if(rank == 0)
+  if(rank == 0) {
     printf("Running with OpenSHMEM, npes = %i\n", num_nodes);
+  }
 #else
   num_nodes=1;
   rank=0;
@@ -199,15 +200,15 @@ int main(int argc, char **argv)
 
     printf("\nScalable Data Generator - genScalData() beginning execution...\n");
   }
-
-  /*
-  int gogogo=0;
+#if 0
+int gogogo=1;
+    if(rank == 1){
   printf("Ready to debug on pid=%i\n", getpid());
   while(gogogo == 0){
   }
   shmem_barrier_all();
-  */
-
+}
+#endif
   gettimeofday(&start_time, NULL);
 
   sim_matrix = gen_sim_matrix(global_parameters.SIM_EXACT, global_parameters.SIM_SIMILAR, global_parameters.SIM_DISSIMILAR, global_parameters.GAP_START, global_parameters.GAP_EXTEND, global_parameters.MATCH_LIMIT);
