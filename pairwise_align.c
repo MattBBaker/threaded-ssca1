@@ -137,14 +137,20 @@ static void considerAdding(score_t score, int minSeparation, index_t main_index,
 
 void release_good_match(good_match_t *doomed)
 {
-  if(doomed==NULL) return;
+  if(!doomed) return;
   free(doomed->goodScores);
-  free(doomed->goodEnds[1]);
-  free(doomed->goodEnds[0]);
-  free(doomed->bestStarts[0]);
-  free(doomed->bestStarts[1]);
-  free(doomed->bestEnds[0]);
-  free(doomed->bestEnds[1]);
+  if(doomed->goodEnds) {
+    free(doomed->goodEnds[1]);
+    free(doomed->goodEnds[0]);
+  }
+  if(doomed->bestStarts){
+    free(doomed->bestStarts[0]);
+    free(doomed->bestStarts[1]);
+  }
+  if(doomed->bestEnds){
+    free(doomed->bestEnds[0]);
+    free(doomed->bestEnds[1]);
+  }
   free(doomed->bestScores);
   for(int idx=0; idx<doomed->bestLength; idx++)
   {
@@ -351,6 +357,9 @@ static void collect_best_results(current_ends_t **good_ends, int max_reports, in
   }
 
   free(sorted_list);
+  free(collected_ends.goodScores);
+  free(collected_ends.goodEnds[0]);
+  free(collected_ends.goodEnds[1]);
 
   answer->numReports = max_values;
 }
@@ -385,11 +394,8 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   const int max_threads = omp_get_max_threads();
 
   current_ends_t **good_ends = (current_ends_t **)malloc(sizeof(current_ends_t *)*max_threads);
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-  for(int jdx=0; jdx < max_threads; jdx++) {
-    int idx = omp_get_thread_num();
+
+  for(int idx=0; idx < max_threads; idx++) {
     malloc_all(sizeof(current_ends_t), (void **)&good_ends[idx]);
     good_ends[idx]->size = sortReports;
     good_ends[idx]->report = 0;
@@ -598,7 +604,6 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
       cmp_a = 0;
       cmp_a = cmp_a > E ? cmp_a : E;
       cmp_a = cmp_a > F ? cmp_a : F;
-      //printf("sim_matrix=%p sim_matrix->similarity=%p ");
       W = sim_matrix->similarity[current_main][current_match];
       G += W;
       new_score = cmp_a > G ? cmp_a : G;
@@ -642,6 +647,7 @@ good_match_t *pairwise_align(seq_data_t *seq_data, sim_matrix_t *sim_matrix, con
   }
 
   answer = (good_match_t*)malloc(sizeof(good_match_t));
+  memset(answer,'\0',sizeof(good_match_t));
   answer->simMatrix = sim_matrix;
   answer->seqData = seq_data;
   answer->goodEnds[0] = (index_t*)malloc(sizeof(index_t)*maxReports);

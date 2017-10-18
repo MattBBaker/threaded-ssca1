@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef _OPENMP
-  printf("Running with OpenMP\n");
+  printf("Running with OpenMP, thread count: %i\n", omp_get_max_threads());
 #endif
 
 #ifdef USE_MPI3
@@ -143,9 +143,7 @@ int main(int argc, char **argv)
   printf("Running with MPI-3, world size is %d\n", num_nodes);
 #else
 #ifdef USE_SHMEM
-  //start_pes(0);
   int thread_level;
-  shmem_init();
   shmemx_init_thread(SHMEM_THREAD_MULTIPLE, &thread_level);
   num_nodes=shmem_n_pes();
   rank=shmem_my_pe();
@@ -184,9 +182,7 @@ int main(int argc, char **argv)
     // 2613174141 -- segfault caused by insert_validation producting two identical values
     // -550696422 -- segfault caused by the RNG producing 0.
     random_seed = (unsigned int)2613174141;
-  }
-  else
-  {
+  } else {
     random_seed = (unsigned int)time(NULL); /* casting from time_t to unsigned int we can lose precision... no big deal here */
     random_seed += get_dev_rand();
     distribute_rng_seed(random_seed);
@@ -216,11 +212,10 @@ int main(int argc, char **argv)
 
   if(rank == 0){
     display_elapsed(&start_time);
-
-  if(global_parameters.ENABLE_VERIF)
-  {
-    verifyData(sim_matrix, seq_data);
-  }
+    if(global_parameters.ENABLE_VERIF)
+    {
+      verifyData(sim_matrix, seq_data);
+    }
   }
 
   /* Kernel 1 run */
@@ -236,26 +231,27 @@ int main(int argc, char **argv)
   A=pairwise_align(seq_data, sim_matrix, global_parameters.K1_MIN_SCORE, global_parameters.K1_MAX_REPORTS, global_parameters.K1_MIN_SEPARATION);
 
   if(rank == 0){
-  display_elapsed(&start_time);
+    display_elapsed(&start_time);
   }
 
   /* Kernel 2 run */
 
   if(rank == 0){
-  printf("\nBegining Kernel 2 execution.\n");
+    printf("\nBegining Kernel 2 execution.\n");
 
-  gettimeofday(&start_time, NULL);
+    gettimeofday(&start_time, NULL);
  
-  scanBackward(A, global_parameters.K2_MAX_REPORTS, global_parameters.K2_MIN_SEPARATION);
+    scanBackward(A, global_parameters.K2_MAX_REPORTS, global_parameters.K2_MIN_SEPARATION);
 
-  display_elapsed(&start_time);
+    display_elapsed(&start_time);
 
-  if(global_parameters.ENABLE_VERIF)
-  {
-    verify_alignment(A, global_parameters.K2_DISPLAY);
+    if(global_parameters.ENABLE_VERIF)
+    {
+      verify_alignment(A, global_parameters.K2_DISPLAY);
+    }
   }
-  }
-  //release_good_match(A);
+  shmem_barrier_all();
+  release_good_match(A);
   release_sim_matrix(sim_matrix);
   release_scal_data(seq_data);
 
@@ -263,6 +259,10 @@ int main(int argc, char **argv)
 #ifdef USE_MPI3
   MPI_Win_unlock_all(window);
 #endif
+#ifdef USE_SHMEM
+  shmem_finalize();
+#endif
 
   return 0;
 }
+

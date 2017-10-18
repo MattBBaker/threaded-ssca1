@@ -22,7 +22,7 @@
 COMPILER=cray
 
 #comment out this line to turn off debugging code
-#DEBUG=1
+DEBUG=1
 
 #uncomment this line to use OpenSHMEM
 COMM=-DUSE_SHMEM
@@ -30,8 +30,10 @@ COMM=-DUSE_SHMEM
 #uncomment this line to use MPI3
 #COMM=-DUSE_MPI3
 
+#COMM=-DUSE_NONE
+
 #uncomment this line to enable prefetching
-PREFETCH=-DUSE_PREFETCH
+#PREFETCH=-DUSE_PREFETCH
 
 ifeq ($(COMPILER), sgi)
         CC=cc
@@ -42,7 +44,7 @@ ifeq ($(COMPILER), sgi)
 endif
 
 ifeq ($(COMPILER), gcc)
-        CC=gcc
+        CC=oshcc
         COMMON_CFLAGS=-std=c99 -Wall -pipe -g $(COMM) $(PREFETCH)
         OPTIMIZED_CFLAGS=-O3 -pipe -frename-registers -fopenmp
         DEBUG_CFLAGS=-Og -ggdb -DDEBUG -fopenmp
