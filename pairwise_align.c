@@ -210,7 +210,6 @@ static void fetch_score(score_matrix_t *A, index_t m, index_t n, score_t *in){
 #ifndef USE_NONE
   int target_ep = n / A->local_length;
   int local_index = n % A->local_length;
-  //printf("fetch score dest=%p src=%p\n", in, &(A->scores[index2d(m%3,local_index,A->local_length)]));
   SHORT_GET(in, &(A->scores[index2d(m%3,local_index,A->local_length)]), 1, target_ep);
 #else
   *in = A->scores[index2d(m%3,n,A->local_length)];
@@ -221,7 +220,6 @@ static void fetch_gap(gap_matrix_t *A, index_t m, index_t n, score_t *in){
 #ifndef USE_NONE
   int target_ep = n / A->local_length;
   int local_index = n %A->local_length;
-  //printf("Fetch gap dest=%p src=%p\n", in,  &(A->scores[index2d(m%2,local_index,A->local_length)]));
   SHORT_GET(in, &(A->scores[index2d(m%2,local_index,A->local_length)]), 1, target_ep);
 #else
   *in = A->scores[index2d(m%2,n,A->local_length)];
